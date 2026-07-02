@@ -24,6 +24,8 @@ class ConfigStore(
     filesDir: File,
     private val httpGet: suspend (String, Map<String, String>) -> HttpResponse = Http::get,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val seedLoader: (() -> ByteArray?)? = null,
+    private val listener: ConfigStoreListener? = null,
 ) {
     private val mutex = Mutex()
 
@@ -53,13 +55,28 @@ class ConfigStore(
         ConfigState(activeConfig, activeSource, activeSignatureVerified, lastSuccessfulFetchMillis, cachedETag)
     }
 
-    /** Loads the on-disk cache into memory if nothing is active yet. */
+    /** Loads the on-disk cache into memory if nothing is active yet, falling back to
+     *  the bundled seed. The cache always wins over the seed; a corrupt seed is
+     *  ignored without crashing (mirroring Swift's loadBundledSeed placement). */
     suspend fun loadCachedConfigIfNeeded() = mutex.withLock {
         if (activeConfig != null) return@withLock
-        loadCachedConfig()
-        // No bundled-seed loader in the core; the seed loader lives in the Android
-        // artifact (Plan 3) where the app bundle is available.
+        if (loadCachedConfig() == false) loadSeed()
         Unit
+    }
+
+    /** Decodes the optional bundled seed (source = SEED, unsigned). A missing or
+     *  corrupt seed leaves the store empty rather than throwing. */
+    private fun loadSeed() {
+        val bytes = seedLoader?.invoke() ?: return
+        val config = try {
+            BuntingJson.decodeFromString(BuntingConfiguration.serializer(), bytes.toString(Charsets.UTF_8))
+        } catch (_: Exception) {
+            return
+        }
+        activeConfig = config
+        activeSource = ConfigSource.SEED
+        activeSignatureVerified = false
+        listener?.didLoadCachedConfig(config.configVersion)
     }
 
     /** Refreshes from the endpoint, honouring rate limiting and the hard TTL. */
@@ -80,6 +97,7 @@ class ConfigStore(
             cachedETag?.let { headers["If-None-Match"] = it }
             cachedLastModified?.let { headers["If-Modified-Since"] = it }
         }
+        listener?.didStartFetch(bootstrap.endpointUrl)
         val response = httpGet(bootstrap.endpointUrl, headers)
         lastFetchTimeMillis = nowMillis()
 
@@ -92,12 +110,24 @@ class ConfigStore(
         if (response.statusCode != 200) throw ConfigStoreException("HTTP ${response.statusCode}")
 
         val data = response.body
-        val jws = response.header(SignatureTransport.HEADER_NAME)
-            ?: fetchSignatureSibling()
-            ?: throw ConfigStoreException("No signature available for config")
+        val jws = response.header(SignatureTransport.HEADER_NAME) ?: fetchSignatureSibling()
+        if (jws == null) {
+            listener?.didVerifySignature(false)
+            val error = ConfigStoreException("No signature available for config")
+            listener?.didCompleteFetch(false, error)
+            throw error
+        }
 
         // verify → decode → cache, in that order.
-        JwsVerifier.verifyDetached(jws, data, bootstrap.publicKeys)
+        try {
+            JwsVerifier.verifyDetached(jws, data, bootstrap.publicKeys)
+        } catch (e: Exception) {
+            listener?.didVerifySignature(false)
+            listener?.didCompleteFetch(false, e)
+            throw e
+        }
+        listener?.didVerifySignature(true)
+
         val newConfig = BuntingJson.decodeFromString(
             BuntingConfiguration.serializer(), data.toString(Charsets.UTF_8))
         saveToCache(data, jws)
@@ -110,6 +140,7 @@ class ConfigStore(
         cachedLastModified = response.header("Last-Modified")
         lastSuccessfulFetchMillis = nowMillis()
         saveMetadata()
+        listener?.didCompleteFetch(true, null)
     }
 
     private suspend fun fetchSignatureSibling(): String? {
@@ -138,6 +169,7 @@ class ConfigStore(
         activeSource = ConfigSource.CACHE
         activeSignatureVerified = true
         loadMetadata()
+        listener?.didLoadCachedConfig(config.configVersion)
         return true
     }
 
