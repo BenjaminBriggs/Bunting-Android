@@ -17,5 +17,9 @@ class MemoizationCache {
 
     fun get(key: CacheKey): FlagValue? = cache[key]
     fun set(key: CacheKey, value: FlagValue) { cache[key] = value }
+
+    /** Drops every cached entry for a single flag (across environments/versions). */
+    fun invalidate(flagKey: String) { cache.keys.removeAll { it.flagKey == flagKey } }
+
     fun invalidateAll() = cache.clear()
 }
