@@ -26,7 +26,11 @@ class BuntingCodegenPlugin : Plugin<Project> {
                     t.seedConfig.from(extension.seedConfig)
                     t.packageName.set(extension.packageName)
                 }
-                variant.sources.kotlin?.addGeneratedSourceDirectory(task, GenerateBuntingFlagsTask::outputDir)
+                // Register with the java source set: AGP's Kotlin-Android compilation picks
+                // up .kt files there, and (unlike sources.kotlin on this AGP line) the
+                // generated-directory wiring reliably feeds compileDebugKotlin.
+                val sources = variant.sources.java ?: variant.sources.kotlin
+                sources?.addGeneratedSourceDirectory(task, GenerateBuntingFlagsTask::outputDir)
             }
         }
         project.afterEvaluate {

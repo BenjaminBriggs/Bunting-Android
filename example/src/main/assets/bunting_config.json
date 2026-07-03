@@ -1,0 +1,14 @@
+{
+  "app_identifier": "com.example.buntingexample",
+  "endpoint_url": "https://cdn.example.com/bunting/com.example.buntingexample/config.json",
+  "public_keys": [
+    {
+      "kid": "key-2025-01",
+      "pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAplaceholderplaceholderplaceholder\nplaceholderplaceholderplaceholderplaceholderplaceholderplaceholderplaceholder\n-----END PUBLIC KEY-----\n"
+    }
+  ],
+  "fetch_policy": {
+    "min_interval_seconds": 60,
+    "hard_ttl_days": 7
+  }
+}
