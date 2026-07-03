@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "config_version": "seed-1",
+  "published_at": "2026-07-02T00:00:00.000Z",
+  "app_identifier": "demo",
+  "flags": {
+    "f/enabled": {
+      "type": "bool",
+      "development": { "default": true },
+      "beta": { "default": true },
+      "production": { "default": true }
+    }
+  },
+  "tests": {},
+  "rollouts": {}
+}

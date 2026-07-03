@@ -1,0 +1,6 @@
+{
+  "app_identifier": "demo",
+  "endpoint_url": "http://127.0.0.1:1/manifest.json",
+  "public_keys": [{ "kid": "k1", "pem": "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----\n" }],
+  "fetch_policy": { "min_interval_seconds": 0, "hard_ttl_days": 7 }
+}
