@@ -99,6 +99,11 @@ public fun BuntingDebugScreen(
     }
 
     if (showDetails) {
-        BuntingDetailsSheet(state = state, onDismiss = { showDetails = false }, client = client)
+        BuntingDetailsSheet(
+            state = state,
+            onDismiss = { showDetails = false },
+            client = client,
+            userFingerprint = client.userFingerprint,
+        )
     }
 }

@@ -68,7 +68,7 @@ On any fetch or verification failure the task fails without touching the existin
 ### Debug UI
 
 ```kotlin
-BuntingInfoScreen()    // read-only: searchable flag list, details sheet, pull-to-refresh
+BuntingInfoScreen()    // read-only: searchable flag list, details sheet (incl. copyable config fingerprint), pull-to-refresh
 BuntingDebugScreen()   // adds override editing, clear-all, reset identity, environment switch
 ```
 

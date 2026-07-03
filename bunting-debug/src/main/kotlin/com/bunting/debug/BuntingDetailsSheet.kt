@@ -1,5 +1,6 @@
 package com.bunting.debug
 
+import android.content.ClipData
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,16 +16,22 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.toClipEntry
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.bunting.BuntingClient
 import com.bunting.BuntingState
 import com.bunting.model.BuntingEnvironment
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -40,6 +47,7 @@ internal fun BuntingDetailsSheet(
     state: BuntingState,
     onDismiss: () -> Unit,
     client: BuntingClient? = null,
+    userFingerprint: String? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
@@ -74,6 +82,9 @@ internal fun BuntingDetailsSheet(
                 "Local ID",
                 state.localId?.toString() ?: "—"
             )
+            if (userFingerprint != null) {
+                FingerprintRow(userFingerprint)
+            }
             DetailRow(
                 "Last fetch",
                 state.lastFetchTimeMillis?.let { Instant.ofEpochMilli(it).toString() } ?: "—",
@@ -140,6 +151,48 @@ private fun DebugControls(state: BuntingState, client: BuntingClient) {
             dismissButton = {
                 TextButton(onClick = { confirmClearAll = false }) { Text("Cancel") }
             },
+        )
+    }
+}
+
+/**
+ * The config fingerprint with a copy action, so it can be pasted into the
+ * Bunting admin (or a support ticket) to share how flags resolved on this device.
+ */
+@Composable
+private fun FingerprintRow(fingerprint: String) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    var copied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1_500)
+            copied = false
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Fingerprint", style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = {
+                scope.launch {
+                    clipboard.setClipEntry(
+                        ClipData.newPlainText("Bunting fingerprint", fingerprint).toClipEntry()
+                    )
+                    copied = true
+                }
+            }) { Text(if (copied) "Copied" else "Copy") }
+        }
+        Text(
+            fingerprint,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

@@ -107,6 +107,10 @@ public fun BuntingInfoScreen(
     }
 
     if (showDetails) {
-        BuntingDetailsSheet(state = state, onDismiss = { showDetails = false })
+        BuntingDetailsSheet(
+            state = state,
+            onDismiss = { showDetails = false },
+            userFingerprint = client.userFingerprint,
+        )
     }
 }
