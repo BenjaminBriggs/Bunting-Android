@@ -1,0 +1,9 @@
+{
+  "app_identifier": "local-demo",
+  "endpoint_url": "http://10.0.2.2:9000/bunting-configs/local-demo/config.json",
+  "public_keys": [],
+  "fetch_policy": {
+    "min_interval_seconds": 0,
+    "hard_ttl_days": 7
+  }
+}
