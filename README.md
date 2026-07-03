@@ -48,6 +48,16 @@ buntingCodegen {
 
 `store/use_new_paywall_design` then reads as `Bunting.store.useNewPaywallDesign` (Swift: `Bunting.shared.store.useNewPaywallDesign`). Codegen never fails the build: a missing or invalid seed generates a fallback file and string-based access keeps working.
 
+### Fetching the latest config (Swift `FetchConfigPlugin` equivalent)
+
+The plugin also registers `fetchBuntingConfig`: it reads the module's bootstrap (`assets/bunting_config.json`), downloads `config.json` from the endpoint, verifies the detached RS256 JWS offline, and only then overwrites the seed (`assets/BuntingConfig.json`) — refreshing both the codegen input and the config bundled with the app. Run it from Android Studio's **Gradle tool window → (module) → Tasks → bunting → fetchBuntingConfig**, or:
+
+```bash
+./gradlew :app:fetchBuntingConfig
+```
+
+On any fetch or verification failure the task fails without touching the existing seed.
+
 ### Debug UI
 
 ```kotlin

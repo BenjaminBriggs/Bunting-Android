@@ -24,6 +24,14 @@ class BuntingCodegenPlugin : Plugin<Project> {
         val extension = project.extensions.create("buntingCodegen", BuntingCodegenExtension::class.java)
         extension.seedConfig.convention(project.layout.projectDirectory.file("src/main/assets/BuntingConfig.json"))
         extension.packageName.convention("com.bunting.generated")
+        extension.bootstrapConfig.convention(project.layout.projectDirectory.file("src/main/assets/bunting_config.json"))
+
+        project.tasks.register("fetchBuntingConfig", FetchBuntingConfigTask::class.java) { task ->
+            task.group = "bunting"
+            task.description = "Fetch and verify the latest config from the bootstrap endpoint into the seed config"
+            task.bootstrapConfig.set(extension.bootstrapConfig)
+            task.seedConfig.set(extension.seedConfig)
+        }
 
         var applied = false
         project.plugins.withType(AndroidBasePlugin::class.java) {

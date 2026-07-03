@@ -44,33 +44,59 @@ internal fun BuntingDetailsSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
             if (client != null) {
-                DebugControls(state, client)
+                EnvironmentPicker(state, client)
             }
-            Text("Configuration", style = MaterialTheme.typography.titleMedium)
-            DetailRow("Environment", state.environment.name.lowercase())
-            DetailRow("Config version", state.configVersion ?: "—")
-            DetailRow("Published at", state.publishedAt ?: "—")
-            DetailRow("Signature verified", state.signatureVerified.toString())
-            DetailRow("Source", state.configSource?.name?.lowercase() ?: "—")
-            DetailRow("Local ID", state.localId?.toString() ?: "—")
+            Text(
+                "Configuration",
+                style = MaterialTheme.typography.titleMedium
+            )
+            DetailRow(
+                "Environment",
+                state.environment.name.lowercase()
+            )
+            DetailRow(
+                "Config version",
+                state.configVersion ?: "—"
+            )
+            DetailRow(
+                "Published at",
+                state.publishedAt ?: "—"
+            )
+            DetailRow(
+                "Signature verified",
+                state.signatureVerified.toString()
+            )
+            DetailRow(
+                "Source",
+                state.configSource?.name?.lowercase() ?: "—"
+            )
+            DetailRow(
+                "Local ID",
+                state.localId?.toString() ?: "—"
+            )
             DetailRow(
                 "Last fetch",
                 state.lastFetchTimeMillis?.let { Instant.ofEpochMilli(it).toString() } ?: "—",
             )
-            DetailRow("ETag", state.etag ?: "—")
+            DetailRow(
+                "ETag",
+                state.etag ?: "—"
+            )
+
+            if (client != null) {
+                DebugControls(state, client)
+            }
         }
     }
 }
 
+
 /** Environment switcher + debug actions, shown only when opened from the debug view. */
 @Composable
-private fun DebugControls(state: BuntingState, client: BuntingClient) {
-    var confirmClearAll by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+private fun EnvironmentPicker(state: BuntingState, client: BuntingClient) {
     val environments = BuntingEnvironment.entries
-
     Text(
-        "Debug",
+        "Environment",
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(top = 16.dp),
     )
@@ -87,6 +113,13 @@ private fun DebugControls(state: BuntingState, client: BuntingClient) {
             }
         }
     }
+}
+
+/** Environment switcher + debug actions, shown only when opened from the debug view. */
+@Composable
+private fun DebugControls(state: BuntingState, client: BuntingClient) {
+    var confirmClearAll by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Row {
         TextButton(onClick = { scope.launch { client.refresh() } }) { Text("Refresh") }
         TextButton(onClick = { confirmClearAll = true }) { Text("Clear all overrides") }

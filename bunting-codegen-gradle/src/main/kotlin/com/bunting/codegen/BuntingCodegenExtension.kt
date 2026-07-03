@@ -17,4 +17,7 @@ abstract class BuntingCodegenExtension {
 
     /** Package of the generated file. Default: `com.bunting.generated`. */
     abstract val packageName: Property<String>
+
+    /** The bootstrap document `fetchBuntingConfig` reads. Default: `src/main/assets/bunting_config.json`. */
+    abstract val bootstrapConfig: RegularFileProperty
 }
