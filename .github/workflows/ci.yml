@@ -24,3 +24,7 @@ jobs:
           packages: 'platforms;android-36 build-tools;36.0.0'
       - name: Build
         run: ./gradlew build --stacktrace
+      - name: Codegen plugin tests
+        run: ./gradlew -p bunting-codegen-gradle build --stacktrace
+      - name: Example assemble
+        run: ./gradlew :example:assembleDebug --stacktrace
