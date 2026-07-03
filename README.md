@@ -1,6 +1,13 @@
+<div align="center">
+  <img src="docs/assets/logotype-kotlin.png" alt="Bunting Android SDK" width="400" />
+</div>
+
 # bunting-sdk-android
 
 Kotlin client SDK for [Bunting](../docs/README.md) feature flags — the Android counterpart to `bunting-sdk-swift`. Fetches a signed `config.json`, verifies a detached RS256 JWS offline, caches it, and evaluates flags locally.
+
+> [!TIP]
+> Full documentation for the dashboard, SDK integration, and self-hosting lives at **[benjaminbriggs.github.io/Bunting-Documentation](https://benjaminbriggs.github.io/Bunting-Documentation/)**.
 
 ## Modules
 
