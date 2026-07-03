@@ -12,6 +12,15 @@ import org.gradle.api.Project
  */
 class BuntingCodegenPlugin : Plugin<Project> {
     override fun apply(project: Project) {
+        // IDE-sync workaround: a build script that loads this plugin (an included
+        // build) gets its own script classpath, so Gradle's Kotlin DSL model
+        // builder requests prepareKotlinBuildScriptModel on the project itself —
+        // but the Kotlin plugin only registers it on the build root. Without this
+        // no-op, Android Studio sync fails with "task not found in project".
+        if (project.tasks.names.contains("prepareKotlinBuildScriptModel") == false) {
+            project.tasks.register("prepareKotlinBuildScriptModel")
+        }
+
         val extension = project.extensions.create("buntingCodegen", BuntingCodegenExtension::class.java)
         extension.seedConfig.convention(project.layout.projectDirectory.file("src/main/assets/BuntingConfig.json"))
         extension.packageName.convention("com.bunting.generated")
