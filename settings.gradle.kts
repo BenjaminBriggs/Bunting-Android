@@ -16,4 +16,4 @@ dependencyResolutionManagement {
     }
 }
 
-include(":bunting-verify", ":bunting", ":bunting-cli", ":bunting-android")
+include(":bunting-verify", ":bunting", ":bunting-cli", ":bunting-android", ":bunting-debug")
