@@ -19,7 +19,7 @@ java {
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    compileOnly("com.android.tools.build:gradle-api:8.9.2")
+    compileOnly("com.android.tools.build:gradle-api:8.13.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.3")
 }

@@ -53,8 +53,9 @@ kotlinx-serialization + coroutines; anything touching `android.*` lives in
 `:bunting-android` (Robolectric-tested) or above.
 
 **Codegen never fails the build** — missing/invalid seed emits a fallback file.
-Generated dirs register on the **java** source set (AGP 8.9 `sources.kotlin` does not
-feed compileKotlin).
+Generated dirs register on the **java** source set (`sources.kotlin` did not feed
+compileKotlin on AGP 8.9; the java wiring is kept on later AGP versions as the
+known-good path).
 
 **Style**: `bool == false` over `!bool`; libraries log via `java.util.logging`, never
 `println` (CLI output is the exception). Unit tests run once against the debug variant
