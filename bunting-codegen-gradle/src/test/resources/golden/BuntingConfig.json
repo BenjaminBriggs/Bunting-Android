@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "config_version": "2025-01-15.1",
+  "published_at": "2025-01-15T10:00:00Z",
+  "app_identifier": "com.example.buntingexample",
+  "flags": {
+    "store/use_new_paywall_design": {
+      "type": "bool",
+      "description": "Enable the new paywall design",
+      "development": {
+        "default": false,
+        "variants": []
+      },
+      "beta": {
+        "default": true,
+        "variants": []
+      },
+      "production": {
+        "default": false,
+        "variants": []
+      }
+    },
+    "store/subscription_discount": {
+      "type": "int",
+      "description": "Percentage discount for subscriptions",
+      "development": {
+        "default": 20,
+        "variants": []
+      },
+      "beta": {
+        "default": 15,
+        "variants": []
+      },
+      "production": {
+        "default": 10,
+        "variants": []
+      }
+    },
+    "store/price_multiplier": {
+      "type": "double",
+      "description": "Price multiplier for regional pricing",
+      "development": {
+        "default": 1.0,
+        "variants": []
+      },
+      "beta": {
+        "default": 1.0,
+        "variants": []
+      },
+      "production": {
+        "default": 1.0,
+        "variants": []
+      }
+    },
+    "store/promo_banner_text": {
+      "type": "string",
+      "description": "Promotional banner text",
+      "development": {
+        "default": "50% Off - Limited Time!",
+        "variants": []
+      },
+      "beta": {
+        "default": "Special Offer - Save Now",
+        "variants": []
+      },
+      "production": {
+        "default": "Upgrade Today",
+        "variants": []
+      }
+    },
+    "store/promo_end_date": {
+      "type": "date",
+      "description": "End date for current promotion",
+      "development": {
+        "default": "2025-12-31T23:59:59Z",
+        "variants": []
+      },
+      "beta": {
+        "default": "2025-12-31T23:59:59Z",
+        "variants": []
+      },
+      "production": {
+        "default": "2025-06-30T23:59:59Z",
+        "variants": []
+      }
+    },
+    "ui/theme_color": {
+      "type": "string",
+      "description": "Primary theme color (hex)",
+      "development": {
+        "default": "#007AFF",
+        "variants": []
+      },
+      "beta": {
+        "default": "#007AFF",
+        "variants": []
+      },
+      "production": {
+        "default": "#007AFF",
+        "variants": []
+      }
+    },
+    "ui/welcome_message": {
+      "type": "string",
+      "description": "Welcome message shown to users",
+      "development": {
+        "default": "Welcome to Bunting!",
+        "variants": []
+      },
+      "beta": {
+        "default": "Welcome to Bunting!",
+        "variants": []
+      },
+      "production": {
+        "default": "Welcome!",
+        "variants": []
+      }
+    },
+    "ui/enable_animations": {
+      "type": "bool",
+      "description": "Enable UI animations",
+      "development": {
+        "default": true,
+        "variants": []
+      },
+      "beta": {
+        "default": true,
+        "variants": []
+      },
+      "production": {
+        "default": true,
+        "variants": []
+      }
+    },
+    "features/show_onboarding": {
+      "type": "bool",
+      "description": "Show onboarding flow to new users",
+      "development": {
+        "default": true,
+        "variants": []
+      },
+      "beta": {
+        "default": true,
+        "variants": []
+      },
+      "production": {
+        "default": true,
+        "variants": []
+      }
+    },
+    "features/max_items": {
+      "type": "int",
+      "description": "Maximum items per page",
+      "development": {
+        "default": 50,
+        "variants": []
+      },
+      "beta": {
+        "default": 25,
+        "variants": []
+      },
+      "production": {
+        "default": 20,
+        "variants": []
+      }
+    },
+    "features/max_upload_size": {
+      "type": "int",
+      "description": "Maximum upload size in MB",
+      "development": {
+        "default": 100,
+        "variants": []
+      },
+      "beta": {
+        "default": 50,
+        "variants": []
+      },
+      "production": {
+        "default": 25,
+        "variants": []
+      }
+    },
+    "features/discount_percentage": {
+      "type": "double",
+      "description": "Discount percentage as decimal",
+      "development": {
+        "default": 0.25,
+        "variants": []
+      },
+      "beta": {
+        "default": 0.15,
+        "variants": []
+      },
+      "production": {
+        "default": 0.1,
+        "variants": []
+      }
+    },
+    "layout/home_sections": {
+      "type": "json",
+      "description": "JSON configuration for home screen layout",
+      "development": {
+        "default": "{\"sections\":[\"featured\",\"recent\",\"recommended\"]}",
+        "variants": []
+      },
+      "beta": {
+        "default": "{\"sections\":[\"featured\",\"recent\",\"recommended\"]}",
+        "variants": []
+      },
+      "production": {
+        "default": "{\"sections\":[\"featured\",\"recent\"]}",
+        "variants": []
+      }
+    }
+  },
+  "tests": {},
+  "rollouts": {}
+}

@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("bunting-codegen-gradle")
     repositories {
         google()
         mavenCentral()
