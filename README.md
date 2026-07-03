@@ -57,6 +57,8 @@ BuntingDebugScreen()   // adds override editing, clear-all, reset identity, envi
 
 ## Build & test
 
+**Android Studio:** open the repo root (`bunting-sdk-android/`), not `example/` — the example is a module of this multi-module build (unlike the Swift repo's standalone Xcode project) and has no Gradle build of its own. After sync, pick the `example` run configuration.
+
 ```bash
 ./gradlew build        # compile + test all modules, incl. the codegen plugin's own build
 ./gradlew :bunting:test --tests 'com.bunting.conformance.*'   # conformance gate
