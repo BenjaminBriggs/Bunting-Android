@@ -69,7 +69,8 @@ in AGP modules.
 **Publishing**: one version (`VERSION_NAME` in `gradle.properties`, also read by the
 codegen build). Libraries go to Maven Central as `io.github.benjaminbriggs:<module>` via
 `com.vanniktech.maven.publish` 0.35.0 (0.36+ needs Gradle 9); the plugin goes to the
-Plugin Portal. Signing is only required when `mavenCentralUsername` is set, so
+Plugin Portal by the manual `publish-plugin.yml`, only after the libraries are on
+Central. Signing is only required when `mavenCentralUsername` is set, so
 `publishToMavenLocal` needs no keys. See `docs/releasing.md`.
 
 **Repo policy**: commits land directly on `main`; `./gradlew build` green before every

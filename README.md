@@ -125,7 +125,7 @@ BuntingDebugScreen()   // adds override editing, clear-all, reset identity, envi
 
 ## Releasing
 
-Pushing a tag `v<VERSION_NAME>` runs `.github/workflows/release.yml`: it re-runs CI, uploads the libraries to the Maven Central Portal (released by hand in the portal), publishes the codegen plugin to the Gradle Plugin Portal, and creates a GitHub release with the CLI zip. The version lives in one place, `VERSION_NAME` in `gradle.properties`. One-time account, key, and secret setup is in [docs/releasing.md](docs/releasing.md). `./gradlew publishToMavenLocal` and `./gradlew -p bunting-codegen-gradle publishToMavenLocal` work without any keys.
+Pushing a tag `v<VERSION_NAME>` runs `.github/workflows/release.yml`: it re-runs CI, uploads the libraries to the Maven Central Portal, and creates a GitHub release with the CLI zip. The Central deployment is then released by hand in the portal. Only after the libraries are on Maven Central is the codegen plugin published, by running the manual **Publish codegen plugin** workflow (`.github/workflows/publish-plugin.yml`), which refuses to run until they are. The version lives in one place, `VERSION_NAME` in `gradle.properties`. One-time account, key, and secret setup is in [docs/releasing.md](docs/releasing.md). `./gradlew publishToMavenLocal` and `./gradlew -p bunting-codegen-gradle publishToMavenLocal` work without any keys.
 
 ## Conformance
 

@@ -1,6 +1,6 @@
 # Releasing the Android SDK
 
-A release publishes three things from one tag:
+A release publishes three things. The tag publishes the libraries and the CLI; the plugin follows by hand once the libraries are live:
 
 | What | Where | Coordinates |
 |---|---|---|
@@ -67,16 +67,22 @@ In the GitHub repository, **Settings > Secrets and variables > Actions > New rep
    - fails straight away unless the tag is exactly `v<VERSION_NAME>`;
    - runs the same checks as `ci.yml`;
    - signs the libraries and uploads them to the Central Portal as a deployment (`./gradlew publishToMavenCentral`);
-   - publishes the codegen plugin (`./gradlew -p bunting-codegen-gradle publishPlugins`);
    - builds `bunting-cli-<version>.zip` and creates the GitHub release with generated notes.
-5. **Release the Central deployment by hand.** Uploads are not released automatically (`mavenCentralAutomaticPublishing=false`). Open <https://central.sonatype.com/publishing/deployments>, wait for the deployment to reach **Validated**, check the files, then click **Publish**. Artifacts appear on Maven Central within about 30 minutes. A deployment that fails validation, or one you don't want, can be dropped there instead. Published versions can never be changed or deleted, so bump the version for any fix.
-6. **Plugin Portal review.** The first version of a new plugin id is held for manual review by Gradle before it is listed; later versions go live immediately. The plugin generates code against the libraries, so release the Central deployment promptly after the workflow finishes.
+
+   It does not publish the codegen plugin (step 6).
+5. **Release the Central deployment by hand.** Uploads are not released automatically (`mavenCentralAutomaticPublishing=false`). Open <https://central.sonatype.com/publishing/deployments>, wait for the deployment to reach **Validated**, check the files, then click **Publish**. Artifacts reach Maven Central (`repo1.maven.org`) within about 30 minutes. A deployment that fails validation, or one you don't want, can be dropped there instead. Published versions can never be changed or deleted, so bump the version for any fix.
+6. **Publish the codegen plugin.** Generated code calls the libraries, so the plugin must not go live before them. Once the version is on Maven Central, open **Actions > Publish codegen plugin > Run workflow** and enter the version without the `v` (for example `1.0.0`). `.github/workflows/publish-plugin.yml`:
+   - checks out the tag `v<version>` and fails unless the input equals `VERSION_NAME` there;
+   - fails unless all four libraries are already on `repo1.maven.org` (rerun it later if Central is still syncing);
+   - builds and tests the plugin, then publishes it (`./gradlew -p bunting-codegen-gradle publishPlugins`).
+
+   The first version of a new plugin id is held for manual review by Gradle before it is listed; later versions go live immediately.
 
 ## How signing is wired
 
 `signAllPublications=true` in `gradle.properties` makes the vanniktech plugin sign every publication, and on its own it would make signing mandatory for any non-SNAPSHOT version, including `publishToMavenLocal`. The root `build.gradle.kts` instead requires signing only when the `mavenCentralUsername` property is set. In CI that is always true for the Central upload, so an upload can never go out unsigned; on a developer machine without Central credentials, local publishing works without a key (signing tasks are skipped).
 
-The release workflow passes credentials as `ORG_GRADLE_PROJECT_*` environment variables (`mavenCentralUsername`, `mavenCentralPassword`, `signingInMemoryKey`, `signingInMemoryKeyPassword`), and the Plugin Portal key as `GRADLE_PUBLISH_KEY` / `GRADLE_PUBLISH_SECRET`.
+The release workflow passes credentials as `ORG_GRADLE_PROJECT_*` environment variables (`mavenCentralUsername`, `mavenCentralPassword`, `signingInMemoryKey`, `signingInMemoryKeyPassword`); the plugin workflow passes the Plugin Portal key as `GRADLE_PUBLISH_KEY` / `GRADLE_PUBLISH_SECRET`.
 
 ## Tool versions
 
