@@ -53,7 +53,7 @@ class BuntingCodegenPlugin : Plugin<Project> {
         project.afterEvaluate {
             if (applied == false) {
                 project.logger.warn(
-                    "com.bunting.codegen was applied to ${project.path} but no Android plugin is present; no accessors will be generated."
+                    "io.github.benjaminbriggs.bunting.codegen was applied to ${project.path} but no Android plugin is present; no accessors will be generated."
                 )
             }
         }

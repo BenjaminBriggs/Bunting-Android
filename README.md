@@ -18,10 +18,47 @@ Kotlin client SDK for [Bunting](../docs/README.md) feature flags — the Android
 | `:bunting-cli` | pure JVM | CLI that fetches/verifies/decodes a config from a bootstrap JSON document |
 | `:bunting-android` | Android library (minSdk 26) | `Bunting.configure(context, …)`, device context derivation, assets bootstrap/seed loading, foreground auto-refresh |
 | `:bunting-debug` | Android library (Compose) | `BuntingInfoScreen` (read-only inspector) and `BuntingDebugScreen` (override editing, environment switch) |
-| `bunting-codegen-gradle/` | included build | Gradle plugin `com.bunting.codegen` generating strongly-typed accessors from a seed config |
+| `bunting-codegen-gradle/` | included build | Gradle plugin `io.github.benjaminbriggs.bunting.codegen` generating strongly-typed accessors from a seed config |
 | `:example` | Android app | Compose demo wiring all of the above together |
 
 The pure-JVM core keeps unit tests, the conformance runner, and the CLI headless (no emulator).
+
+## Installation
+
+The libraries are on Maven Central under the group `io.github.benjaminbriggs` (artifact IDs are the module names); the codegen plugin is on the Gradle Plugin Portal. The Kotlin packages stay `com.bunting.*`.
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+```
+
+```kotlin
+// app/build.gradle.kts
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("io.github.benjaminbriggs.bunting.codegen") version "1.0.0"   // optional: typed accessors
+}
+
+dependencies {
+    implementation("io.github.benjaminbriggs:bunting-android:1.0.0")   // brings in :bunting and :bunting-verify
+    implementation("io.github.benjaminbriggs:bunting-debug:1.0.0")     // optional: Compose Info/Debug screens
+}
+```
+
+A pure-JVM project (no Android) depends on `io.github.benjaminbriggs:bunting:1.0.0` instead. `bunting-cli` is not on Maven; each GitHub release attaches `bunting-cli-<version>.zip` (run `bin/bunting-cli`).
 
 ## Quickstart
 
@@ -45,7 +82,7 @@ Bunting.instance.refresh()   // suspend; also runs automatically on foreground
 Apply the plugin and point it at your seed config:
 
 ```kotlin
-plugins { id("com.bunting.codegen") }
+plugins { id("io.github.benjaminbriggs.bunting.codegen") version "1.0.0" }
 
 buntingCodegen {
     packageName = "com.example.app.flags"   // default: com.bunting.generated
@@ -61,7 +98,7 @@ Codegen never fails the build over seed content: a missing or invalid seed gener
 
 ### Fetching the latest config (Swift `FetchConfigPlugin` equivalent)
 
-The plugin also registers `fetchBuntingConfig`: it reads the module's bootstrap (`assets/bunting_config.json`), downloads `config.json` from the endpoint, verifies the detached RS256 JWS offline, checks the payload is a usable seed (valid JSON, a `schema_version` this SDK supports, a `flags` object; flags codegen would skip are reported as warnings), and only then overwrites the seed (`assets/BuntingConfig.json`) — refreshing both the codegen input and the config bundled with the app. Run it from Android Studio's **Gradle tool window → (module) → Tasks → bunting → fetchBuntingConfig**, or:
+The plugin also registers `fetchBuntingConfig`: it reads the module's bootstrap (`assets/bunting_config.json`), downloads `config.json` from the endpoint, verifies the detached RS256 JWS offline, checks the payload is a usable seed (valid JSON, a `schema_version` this SDK supports, a `flags` object; flags codegen would skip are reported as warnings), and only then overwrites the seed (`assets/BuntingConfig.json`), refreshing both the codegen input and the config bundled with the app. Run it from Android Studio's **Gradle tool window → (module) → Tasks → bunting → fetchBuntingConfig**, or:
 
 ```bash
 ./gradlew :app:fetchBuntingConfig
@@ -85,6 +122,10 @@ BuntingDebugScreen()   // adds override editing, clear-all, reset identity, envi
 ./gradlew :bunting:test --tests 'com.bunting.conformance.*'   # conformance gate
 ./gradlew :example:assembleDebug                              # demo app
 ```
+
+## Releasing
+
+Pushing a tag `v<VERSION_NAME>` runs `.github/workflows/release.yml`: it re-runs CI, uploads the libraries to the Maven Central Portal (released by hand in the portal), publishes the codegen plugin to the Gradle Plugin Portal, and creates a GitHub release with the CLI zip. The version lives in one place, `VERSION_NAME` in `gradle.properties`. One-time account, key, and secret setup is in [docs/releasing.md](docs/releasing.md). `./gradlew publishToMavenLocal` and `./gradlew -p bunting-codegen-gradle publishToMavenLocal` work without any keys.
 
 ## Conformance
 

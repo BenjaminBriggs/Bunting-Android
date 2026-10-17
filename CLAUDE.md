@@ -19,7 +19,7 @@ bunting/               # Pure-JVM core (⇄ Swift Sources/Bunting)
 bunting-cli/           # JVM CLI: fetch / verify / decode (⇄ Swift bunting-cli)
 bunting-android/       # AGP binding: configure(context), AndroidContextProvider, assets, foreground refresh
 bunting-debug/         # Compose Info/Debug screens over the FlagInfo presenter
-bunting-codegen-gradle/  # Included build: com.bunting.codegen Gradle plugin (⇄ Swift codegen plugin)
+bunting-codegen-gradle/  # Included build: io.github.benjaminbriggs.bunting.codegen Gradle plugin (⇄ Swift codegen plugin)
 example/               # Compose demo app consuming everything above
 ```
 
@@ -64,6 +64,12 @@ known-good path).
 **Style**: `bool == false` over `!bool`; libraries log via `java.util.logging`, never
 `println` (CLI output is the exception). Unit tests run once against the debug variant
 in AGP modules.
+
+**Publishing**: one version (`VERSION_NAME` in `gradle.properties`, also read by the
+codegen build). Libraries go to Maven Central as `io.github.benjaminbriggs:<module>` via
+`com.vanniktech.maven.publish` 0.35.0 (0.36+ needs Gradle 9); the plugin goes to the
+Plugin Portal. Signing is only required when `mavenCentralUsername` is set, so
+`publishToMavenLocal` needs no keys. See `docs/releasing.md`.
 
 **Repo policy**: commits land directly on `main`; `./gradlew build` green before every
 commit.
