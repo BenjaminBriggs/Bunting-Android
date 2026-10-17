@@ -1,16 +1,12 @@
 package com.bunting.codegen
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import org.gradle.api.GradleException
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.format.DateTimeParseException
 
 /**
  * Pure string-template generator for strongly-typed Bunting flag accessors,
@@ -20,11 +16,12 @@ import java.time.format.DateTimeParseException
  *   joined with `_` before camelCasing (`a/b/c` → namespace `a`, property `bC`).
  * - Single-segment keys become root-level extension properties on `Bunting`.
  * - Defaults come from the `development` environment's `default`, read by the
- *   flag's declared `type` (never by JSON shape): bool = JSON boolean, int = JSON
- *   integer, double = any JSON number, string = verbatim string, date = ISO-8601
- *   string, json = JSON-encoded string.
- * - A flag with an unknown type or a development default that doesn't match its
- *   type is skipped (no accessor) with a warning; it never fails the build.
+ *   flag's declared `type` (never by JSON shape) under the v1 wire contract's C2
+ *   rules ([WireContract]).
+ * - A flag the SDK would skip when decoding (C1: not an object, unknown type, a
+ *   missing environment, an environment default that isn't valid for the type,
+ *   or `variants` that isn't an array) gets no accessor and a warning; it never
+ *   fails the build.
  * - Accessors read through the `Bunting` facade's default-returning methods, so
  *   they return the development default (never throw) before `configure` runs.
  * - Archived flags are annotated `@Deprecated("Flag archived")`.
@@ -43,11 +40,10 @@ object BuntingCodeGenerator {
         "true", "try", "typealias", "typeof", "val", "var", "when", "while",
     )
 
+    private val ENVIRONMENTS = listOf("development", "beta", "production")
+
     /** Member properties of `com.bunting.Bunting`: an extension with one of these names is shadowed and unreachable. */
     private val BUNTING_MEMBER_PROPERTIES = setOf("state", "instance", "isConfigured")
-
-    private val JSON_INTEGER = Regex("-?(0|[1-9][0-9]*)")
-    private val JSON_NUMBER = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?")
 
     /**
      * @param warn receives one human-readable message per skipped flag.
@@ -132,16 +128,24 @@ object BuntingCodeGenerator {
             return null
         }
 
+        // Same checks, in the same order, as the reference decoder's flag().
         val flag = element as? JsonObject ?: return skip("it is not a JSON object")
-        val typeName = (flag["type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            ?: return skip("it has no type")
+        val typeName = WireContract.string(flag["type"]) ?: return skip("it has no type")
         val kind = FlagKind.entries.firstOrNull { it.wireName == typeName }
             ?: return skip("unknown type \"$typeName\"")
-        val development = flag["development"] as? JsonObject
-            ?: return skip("it has no development environment")
-        val rawDefault = development["default"] ?: return skip("its development environment has no default")
-        val defaultLiteral = defaultLiteral(kind, rawDefault)
-            ?: return skip("development default $rawDefault does not match its type \"$typeName\"")
+        var defaultLiteral = ""
+        for (environment in ENVIRONMENTS) {
+            val config = flag[environment] as? JsonObject
+                ?: return skip("the $environment environment is missing or not an object")
+            val rawDefault = config["default"] ?: return skip("the $environment environment has no default")
+            val literal = defaultLiteral(kind, rawDefault)
+                ?: return skip("$environment default $rawDefault is not a valid $typeName")
+            val variants = config["variants"]
+            if (variants != null && variants !is JsonNull && variants !is JsonArray) {
+                return skip("$environment variants must be an array")
+            }
+            if (environment == "development") defaultLiteral = literal
+        }
 
         val segments = key.split("/")
         val namespace = if (segments.size > 1) segments.first() else null
@@ -155,42 +159,23 @@ object BuntingCodeGenerator {
             namespaceName = namespaceName,
             propertyName = propertyName,
             kind = kind,
-            description = (flag["description"] as? JsonPrimitive)?.takeIf { it.isString }?.content,
-            deprecated = (flag["deprecated"] as? JsonPrimitive)?.booleanOrNull ?: false,
+            description = WireContract.string(flag["description"]),
+            deprecated = WireContract.bool(flag["deprecated"]) == true,
             defaultLiteral = defaultLiteral,
         )
     }
 
-    /** The C2 reading of [raw] for [kind] as a Kotlin expression, or null when it doesn't match. */
-    internal fun defaultLiteral(kind: FlagKind, raw: JsonElement): String? {
-        val primitive = raw as? JsonPrimitive ?: return null
-        if (primitive is JsonNull) return null
-        val content = primitive.content
-        return when (kind) {
-            FlagKind.BOOL -> content.takeIf { primitive.isString == false && (it == "true" || it == "false") }
-            FlagKind.INT -> {
-                if (primitive.isString || JSON_INTEGER.matches(content) == false) return null
-                val value = content.toLongOrNull() ?: return null
-                // `-9223372036854775808L` is not a valid Kotlin literal.
-                if (value == Long.MIN_VALUE) "Long.MIN_VALUE" else "${value}L"
-            }
-            FlagKind.DOUBLE -> {
-                if (primitive.isString || JSON_NUMBER.matches(content) == false) return null
-                content.toDoubleOrNull()?.takeIf { it.isFinite() }?.toString()
-            }
-            FlagKind.STRING -> if (primitive.isString) stringLiteral(content) else null
-            // Re-emitted in canonical UTC form so any java.time (incl. Android's) parses it.
-            FlagKind.DATE -> if (primitive.isString) parseDate(content)?.let { "Instant.parse(${stringLiteral(it.toString())})" } else null
-            // The json accessor takes no default; only the shape is checked.
-            FlagKind.JSON -> if (primitive.isString) "" else null
-        }
-    }
-
-    /** ISO-8601 date-time with an offset (`Z` or `±hh:mm`), with or without fractional seconds. */
-    private fun parseDate(raw: String): Instant? = try {
-        OffsetDateTime.parse(raw).toInstant()
-    } catch (_: DateTimeParseException) {
-        null
+    /** The C2 reading of [raw] for [kind] as a Kotlin expression, or null when it isn't valid for the type. */
+    internal fun defaultLiteral(kind: FlagKind, raw: JsonElement): String? = when (kind) {
+        FlagKind.BOOL -> WireContract.bool(raw)?.toString()
+        FlagKind.INT -> WireContract.int(raw)?.let { "${it}L" }
+        FlagKind.DOUBLE -> WireContract.double(raw)?.toString()
+        FlagKind.STRING -> WireContract.string(raw)?.let(::stringLiteral)
+        // Emitted as Instant.toString() (same instant, at most 9 fraction digits) so
+        // Android's java.time parses it too.
+        FlagKind.DATE -> WireContract.instant(raw)?.let { "Instant.parse(${stringLiteral(it.toString())})" }
+        // The json accessor takes no default; only the shape is checked.
+        FlagKind.JSON -> WireContract.string(raw)?.let { "" }
     }
 
     private fun checkCollisions(rootFlags: List<FlagSpec>, namespaces: Map<String, List<FlagSpec>>) {

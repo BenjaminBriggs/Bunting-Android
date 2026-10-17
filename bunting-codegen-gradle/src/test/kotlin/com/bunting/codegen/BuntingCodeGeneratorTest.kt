@@ -1,5 +1,9 @@
 package com.bunting.codegen
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.gradle.api.GradleException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -24,7 +28,9 @@ class BuntingCodeGeneratorTest {
     private fun generate(flagsJson: String, warnings: MutableList<String> = mutableListOf()): String =
         BuntingCodeGenerator.generate("""{"flags":$flagsJson}""", "p") { warnings.add(it) }
 
-    private fun flag(type: String, default: String) = """{"type":"$type","development":{"default":$default}}"""
+    /** A flag whose three environments all carry [default] (the SDK skips a flag missing any of them). */
+    private fun flag(type: String, default: String) =
+        """{"type":"$type","development":{"default":$default},"beta":{"default":$default},"production":{"default":$default}}"""
 
     // MARK: - Key-mapping rules
 
@@ -68,7 +74,7 @@ class BuntingCodeGeneratorTest {
         assertTrue(generated.contains("public class NsFlags internal constructor() {"))
     }
 
-    // MARK: - C2: defaults are read by declared type
+    // MARK: - C2: values are read by declared type (reference: artifact-decoder.ts isValidWireValue)
 
     @Test
     fun wholeNumberDoubleDefaultEmitsDoubleLiteral() {
@@ -78,16 +84,18 @@ class BuntingCodeGeneratorTest {
     }
 
     @Test
-    fun intDefaultsGetLongLiterals() {
+    fun intIsAnyWholeJsonNumberInTheSafeIntegerRange() {
         assertTrue(generate("""{"n":${flag("int", "20")}}""").contains("""Bunting.int("n", 20L)"""))
         assertTrue(generate("""{"n":${flag("int", "-3")}}""").contains("""Bunting.int("n", -3L)"""))
-        assertTrue(
-            generate("""{"n":${flag("int", "-9223372036854775808")}}""").contains("""Bunting.int("n", Long.MIN_VALUE)""")
-        )
+        // JavaScript reads 2.0 and 1e3 as the integers 2 and 1000.
+        assertTrue(generate("""{"n":${flag("int", "2.0")}}""").contains("""Bunting.int("n", 2L)"""))
+        assertTrue(generate("""{"n":${flag("int", "1e3")}}""").contains("""Bunting.int("n", 1000L)"""))
+        assertTrue(generate("""{"n":${flag("int", "9007199254740991")}}""").contains("""Bunting.int("n", 9007199254740991L)"""))
+        assertTrue(generate("""{"n":${flag("int", "-9007199254740991")}}""").contains("""Bunting.int("n", -9007199254740991L)"""))
     }
 
     @Test
-    fun dateDefaultsAreNormalizedToCanonicalUtc() {
+    fun dateIsAUtcInstantWithOptionalFractionalSeconds() {
         assertTrue(
             generate("""{"d":${flag("date", "\"2025-12-31T23:59:59Z\"")}}""")
                 .contains("""Bunting.date("d", Instant.parse("2025-12-31T23:59:59Z"))""")
@@ -96,10 +104,26 @@ class BuntingCodeGeneratorTest {
             generate("""{"d":${flag("date", "\"2025-12-31T23:59:59.250Z\"")}}""")
                 .contains("""Instant.parse("2025-12-31T23:59:59.250Z")""")
         )
-        assertTrue(
-            generate("""{"d":${flag("date", "\"2026-01-01T01:00:00+01:00\"")}}""")
-                .contains("""Instant.parse("2026-01-01T00:00:00Z")""")
+    }
+
+    @Test
+    fun dateValuesAreReadTheWayDateParseReadsThem() {
+        fun literal(raw: String): String? = BuntingCodeGenerator.defaultLiteral(
+            BuntingCodeGenerator.FlagKind.DATE, kotlinx.serialization.json.JsonPrimitive(raw),
         )
+        // Milliseconds come from the first three fraction digits.
+        assertEquals("""Instant.parse("2026-07-02T10:00:04.796Z")""", literal("2026-07-02T10:00:04.7969Z"))
+        assertEquals("""Instant.parse("2026-07-02T10:00:04Z")""", literal("2026-07-02T10:00:04.0000000001Z"))
+        // A day past the month's end rolls over, and 24:00:00 is the next midnight.
+        assertEquals("""Instant.parse("2026-03-02T00:00:00Z")""", literal("2026-02-30T00:00:00Z"))
+        assertEquals("""Instant.parse("2026-01-02T00:00:00Z")""", literal("2026-01-01T24:00:00.000Z"))
+        // Date.parse returns NaN for these.
+        for (invalid in listOf(
+            "2026-01-01T24:00:00.5Z", "2025-12-31T23:59:60Z", "2026-13-01T00:00:00Z", "2026-00-10T00:00:00Z",
+            "2026-01-00T00:00:00Z", "2026-01-32T00:00:00Z", "2026-01-01T00:60:00Z", "2026-01-01T25:00:00Z",
+        )) {
+            assertEquals(null, literal(invalid), invalid)
+        }
     }
 
     @Test
@@ -107,15 +131,16 @@ class BuntingCodeGeneratorTest {
         // A date-shaped or JSON-shaped string on a string flag stays a string.
         val generated = generate(
             """{"s":${flag("string", "\"2025-12-31T23:59:59Z\"")},"t":${flag("string", "\"{\\\"a\\\":1}\"")},""" +
-                """"layout/home":${flag("json", "\"[1,2]\"")}}"""
+                """"layout/home":${flag("json", "\"[1,2]\"")},"layout/scalar":${flag("json", "\"42\"")}}"""
         )
         assertTrue(generated.contains("""Bunting.string("s", "2025-12-31T23:59:59Z")"""))
         assertTrue(generated.contains("""Bunting.string("t", "{\"a\":1}")"""))
         assertTrue(generated.contains("public val home: ByteArray?"))
         assertTrue(generated.contains("""Bunting.jsonData("layout/home")"""))
+        assertTrue(generated.contains("""Bunting.jsonData("layout/scalar")"""))
     }
 
-    // MARK: - C1: unknown types and mismatched defaults are skipped with a warning
+    // MARK: - C1: flags the SDK would skip get no accessor, only a warning
 
     @Test
     fun unknownTypeIsSkippedWithWarning() {
@@ -127,30 +152,61 @@ class BuntingCodeGeneratorTest {
     }
 
     @Test
-    fun defaultsThatDoNotMatchTheDeclaredTypeAreSkipped() {
+    fun defaultsThatAreNotValidForTheDeclaredTypeAreSkipped() {
         val mismatches = mapOf(
             "bool_from_string" to flag("bool", "\"true\""),
             "bool_from_number" to flag("bool", "1"),
-            "int_from_fraction" to flag("int", "1.5"),
-            "int_from_exponent" to flag("int", "1e3"),
+            "int_fractional" to flag("int", "2.5"),
             "int_from_string" to flag("int", "\"7\""),
-            "int_out_of_range" to flag("int", "9223372036854775808"),
+            "int_above_safe_range" to flag("int", "9007199254740992"),
+            "int_below_safe_range" to flag("int", "-9007199254740992"),
+            "int_overflow" to flag("int", "1e999"),
             "double_from_string" to flag("double", "\"0.5\""),
             "double_overflow" to flag("double", "1e999"),
             "string_from_number" to flag("string", "5"),
             "string_from_null" to flag("string", "null"),
             "date_unparseable" to flag("date", "\"not-a-date\""),
-            "date_without_offset" to flag("date", "\"2025-12-31T23:59:59\""),
+            "date_only" to flag("date", "\"2026-07-02\""),
+            "date_with_offset" to flag("date", "\"2026-07-02T00:00:00+01:00\""),
+            "date_with_zero_offset" to flag("date", "\"2026-07-02T00:00:00+00:00\""),
+            "date_without_zone" to flag("date", "\"2025-12-31T23:59:59\""),
+            "date_lowercase_z" to flag("date", "\"2025-12-31T23:59:59z\""),
+            "date_impossible_month" to flag("date", "\"2025-13-01T00:00:00Z\""),
+            "date_second_60" to flag("date", "\"2025-12-31T23:59:60Z\""),
             "json_from_object" to flag("json", """{"a":1}"""),
-            "no_type" to """{"development":{"default":true}}""",
-            "no_development" to """{"type":"bool"}""",
             "not_an_object" to "true",
+            "no_type" to """{"development":{"default":true},"beta":{"default":true},"production":{"default":true}}""",
         )
         val warnings = mutableListOf<String>()
         val generated = generate(mismatches.entries.joinToString(",", "{", "}") { "\"${it.key}\":${it.value}" }, warnings)
         assertFalse(generated.contains("public val"), generated)
         assertEquals(mismatches.keys.sorted(), warnings.map { it.substringAfter("skipped flag \"").substringBefore("\"") })
-        assertTrue(warnings.contains("skipped flag \"bool_from_string\": development default \"true\" does not match its type \"bool\""))
+        assertTrue(warnings.contains("skipped flag \"bool_from_string\": development default \"true\" is not a valid bool"))
+        assertTrue(warnings.contains("skipped flag \"date_with_offset\": development default \"2026-07-02T00:00:00+01:00\" is not a valid date"))
+    }
+
+    @Test
+    fun everyEnvironmentMustDecodeNotJustDevelopment() {
+        val good = """{"default":true,"variants":[]}"""
+        val warnings = mutableListOf<String>()
+        val generated = generate(
+            """{
+                "missing_beta":{"type":"bool","development":$good,"production":$good},
+                "bad_production_default":{"type":"bool","development":$good,"beta":$good,"production":{"default":"yes"}},
+                "variants_not_array":{"type":"bool","development":$good,"beta":{"default":true,"variants":{}},"production":$good},
+                "null_variants_ok":{"type":"bool","development":{"default":true,"variants":null},"beta":{"default":true},"production":$good}
+            }""",
+            warnings,
+        )
+        assertEquals(
+            listOf(
+                "skipped flag \"bad_production_default\": production default \"yes\" is not a valid bool",
+                "skipped flag \"missing_beta\": the beta environment is missing or not an object",
+                "skipped flag \"variants_not_array\": beta variants must be an array",
+            ),
+            warnings,
+        )
+        assertTrue(generated.contains("public val Bunting.nullVariantsOk: Boolean"))
     }
 
     @Test
@@ -158,12 +214,29 @@ class BuntingCodeGeneratorTest {
         // C4: only `default` exists; `defaultValue` / `defaultdefault` are not read.
         val warnings = mutableListOf<String>()
         val generated = generate(
-            """{"a":{"type":"bool","development":{"defaultdefault":true}},"b":{"type":"int","development":{"defaultValue":7}}}""",
+            """{"a":{"type":"bool","development":{"defaultdefault":true},"beta":{"default":true},"production":{"default":true}},""" +
+                """"b":{"type":"int","development":{"defaultValue":7},"beta":{"default":7},"production":{"default":7}}}""",
             warnings,
         )
         assertFalse(generated.contains("public val"))
         assertEquals(2, warnings.size)
-        assertTrue(warnings.all { it.endsWith("its development environment has no default") })
+        assertTrue(warnings.all { it.endsWith("the development environment has no default") })
+    }
+
+    @Test
+    fun skipSetMatchesTheReferenceDecodingVector() {
+        // decoding.json "tolerant" case from the admin's conformance generator: the
+        // flags codegen skips must be exactly the flags the reference decoder skips.
+        val vector = Json.parseToJsonElement(resource("/decoding/tolerant.json")).jsonObject
+        val artifact = vector.getValue("artifact").toString()
+        val expectedSkipped = vector.getValue("skipped_flags").jsonArray.map { it.jsonPrimitive.content }
+        val warnings = mutableListOf<String>()
+        val generated = BuntingCodeGenerator.generate(artifact, "p") { warnings.add(it) }
+        assertEquals(expectedSkipped, warnings.map { it.substringAfter("skipped flag \"").substringBefore("\"") })
+        assertTrue(generated.contains("""Bunting.int("typed/int_written_as_float", 2L)"""), generated)
+        assertTrue(generated.contains("""Bunting.double("typed/double_written_as_int", 3.0)"""))
+        assertTrue(generated.contains("""Bunting.date("typed/date_fractional", Instant.parse("2026-07-02T10:00:04.796Z"))"""))
+        assertTrue(generated.contains("""Bunting.string("typed/iso_looking_string", "2026-01-01T00:00:00Z")"""))
     }
 
     // MARK: - Escaping
@@ -186,7 +259,8 @@ class BuntingCodeGeneratorTest {
     @Test
     fun descriptionsCannotCloseOrOpenTheKdoc() {
         val generated = generate(
-            """{"d":{"type":"bool","description":"ends */ here /* nested\nsecond line","development":{"default":true}}}"""
+            """{"d":{"type":"bool","description":"ends */ here /* nested\nsecond line","development":{"default":true},""" +
+                """"beta":{"default":true},"production":{"default":true}}}"""
         )
         assertTrue(generated.contains("/** ends *&#47; here &#47;* nested second line. Flag key: `d`. Type: `bool`. */"), generated)
         val kdoc = generated.lines().first { it.startsWith("/**") }
@@ -275,8 +349,10 @@ class BuntingCodeGeneratorTest {
 
     @Test
     fun deprecatedFlagGetsAnnotation() {
-        val generated = generate("""{"old":{"type":"bool","deprecated":true,"development":{"default":false}}}""")
-        assertTrue(generated.contains("""@Deprecated("Flag archived")"""))
+        val envs = """"development":{"default":false},"beta":{"default":false},"production":{"default":false}"""
+        val generated = generate("""{"old":{"type":"bool","deprecated":true,$envs},"string_true":{"type":"bool","deprecated":"true",$envs}}""")
+        assertEquals(1, Regex("""@Deprecated\("Flag archived"\)""").findAll(generated).count(), generated)
+        assertTrue(generated.contains("@Deprecated(\"Flag archived\")\npublic val Bunting.old"))
     }
 
     // MARK: - Never-fail

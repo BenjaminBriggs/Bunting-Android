@@ -53,8 +53,9 @@ kotlinx-serialization + coroutines; anything touching `android.*` lives in
 `:bunting-android` (Robolectric-tested) or above.
 
 **Codegen never fails the build over seed content** — missing/invalid seed emits a
-fallback file; unknown types and mismatched development defaults skip the flag with a
-warning. The one hard error is two keys mapping to the same Kotlin identifier.
+fallback file; a flag the reference decoder would skip (C1, values read per C2 in
+`WireContract`, mirroring `bunting-admin/src/lib/artifact-decoder.ts`) gets no accessor
+and a warning. The one hard error is two keys mapping to the same Kotlin identifier.
 Generated accessors go through the default-returning `Bunting.bool(...)` facade, never
 `Bunting.instance` (which throws before `configure`).
 Generated dirs register on the **java** source set (`sources.kotlin` did not feed
