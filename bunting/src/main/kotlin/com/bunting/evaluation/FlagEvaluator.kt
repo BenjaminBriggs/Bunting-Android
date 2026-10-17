@@ -10,7 +10,8 @@ import com.bunting.model.VariantType
 import java.util.UUID
 
 /** Evaluates flags by variant order and precedence, and (for fingerprints) records
- *  which terminal path won. */
+ *  which terminal path won. Value and path come from one pass ([resolve]), so the
+ *  served value and the fingerprint can never disagree. */
 class FlagEvaluator(
     private val configuration: BuntingConfiguration,
     private val environment: BuntingEnvironment,
@@ -20,41 +21,69 @@ class FlagEvaluator(
 ) {
     private val conditionEvaluator = ConditionEvaluator(context, customAttributeResolver)
 
-    fun evaluate(flagKey: String): FlagValue? {
+    /** A flag's resolved value and the index of the fingerprint path that produced it
+     *  (0 is the environment default). */
+    internal data class Resolution(val value: FlagValue, val pathIndex: Int)
+
+    fun evaluate(flagKey: String): FlagValue? = resolve(flagKey)?.value
+
+    /**
+     * Walks the variants in ascending `order`; the first match wins, else the default.
+     * Paths are numbered as the admin's `enumeratePaths` does: 0 is the default, then
+     * per variant one path for conditional, rollout, and unrecognized placeholders, and
+     * one per group of the referenced test.
+     */
+    internal fun resolve(flagKey: String): Resolution? {
         val flag = configuration.flags[flagKey] ?: return null
         val envConfig = flag.config(environment)
+        var base = 1
         for (variant in envConfig.variants.sortedBy { it.order }) {
             when (variant.type) {
-                VariantType.CONDITIONAL ->
+                VariantType.CONDITIONAL -> {
+                    val value = variant.value
                     // Null conditions are a vacuous match, per the contract.
-                    if (conditionEvaluator.evaluateAll(variant.conditions ?: emptyList())) {
-                        variant.value?.let { return it }
+                    if (value != null && conditionEvaluator.evaluateAll(variant.conditions ?: emptyList())) {
+                        return Resolution(value, base)
                     }
+                    base += 1
+                }
                 VariantType.TEST -> {
                     val test = variant.test?.let { configuration.tests[it] }
-                    if (test != null) evaluateTest(test, variant)?.let { return it }
+                    if (test != null) {
+                        matchTestGroup(test, variant)?.let { (groupIndex, value) ->
+                            return Resolution(value, base + groupIndex)
+                        }
+                    }
+                    base += test?.groups?.size ?: 0
                 }
                 VariantType.ROLLOUT -> {
+                    val value = variant.value
                     val rollout = variant.rollout?.let { configuration.rollouts[it] }
-                    if (rollout != null && evaluateRollout(rollout)) {
-                        variant.value?.let { return it }
+                    if (value != null && rollout != null && evaluateRollout(rollout)) {
+                        return Resolution(value, base)
                     }
+                    base += 1
                 }
+                // A placeholder for a variant this SDK couldn't decode never matches but
+                // keeps its fingerprint path.
+                VariantType.UNRECOGNIZED -> base += 1
             }
         }
-        return envConfig.defaultValue
+        return Resolution(envConfig.defaultValue, 0)
     }
 
-    private fun evaluateTest(test: Test, variant: Variant): FlagValue? {
-        if (test.conditions.isNotEmpty() && conditionEvaluator.evaluateAll(test.conditions) == false) {
-            return null
-        }
-        val bucket = Bucketing.bucket(test.salt, localId)
-        test.assignGroup(bucket)?.let { groupName ->
-            variant.values?.get(groupName)?.let { return it }
-        }
-        variant.values?.values?.firstOrNull()?.let { return it }
-        return variant.value
+    /**
+     * The group index and value a test variant serves, or null to skip the variant:
+     * preconditions fail, the bucket lands past the groups' total, the test has no
+     * groups, or the assigned group has no value in this variant.
+     */
+    private fun matchTestGroup(test: Test, variant: Variant): Pair<Int, FlagValue>? {
+        if (test.conditions.isNotEmpty() && conditionEvaluator.evaluateAll(test.conditions) == false) return null
+        val groups = test.groups ?: return null
+        val groupName = test.assignGroup(Bucketing.bucket(test.salt, localId)) ?: return null
+        val value = variant.values?.get(groupName) ?: return null
+        val index = groups.indexOfFirst { it.name == groupName }
+        return if (index >= 0) index to value else null
     }
 
     private fun evaluateRollout(rollout: Rollout): Boolean {
@@ -74,47 +103,10 @@ class FlagEvaluator(
     }
 
     private fun variantPathCount(variant: Variant): Int = when (variant.type) {
-        VariantType.CONDITIONAL, VariantType.ROLLOUT -> 1
+        VariantType.CONDITIONAL, VariantType.ROLLOUT, VariantType.UNRECOGNIZED -> 1
         VariantType.TEST -> variant.test?.let { configuration.tests[it]?.groups?.size } ?: 0
     }
 
-    fun resolvePathIndex(flagKey: String): Int {
-        val flag = configuration.flags[flagKey] ?: return 0
-        var base = 1
-        for (variant in flag.config(environment).variants.sortedBy { it.order }) {
-            when (variant.type) {
-                VariantType.CONDITIONAL -> {
-                    if (conditionEvaluator.evaluateAll(variant.conditions ?: emptyList()) && variant.value != null) {
-                        return base
-                    }
-                    base += 1
-                }
-                VariantType.ROLLOUT -> {
-                    val rollout = variant.rollout?.let { configuration.rollouts[it] }
-                    if (rollout != null && evaluateRollout(rollout) && variant.value != null) {
-                        return base
-                    }
-                    base += 1
-                }
-                VariantType.TEST -> {
-                    val groupCount = variant.test?.let { configuration.tests[it]?.groups?.size } ?: 0
-                    val test = variant.test?.let { configuration.tests[it] }
-                    val groupIndex = test?.let { matchedTestGroupIndex(it) }
-                    if (groupIndex != null) return base + groupIndex
-                    base += groupCount
-                }
-            }
-        }
-        return 0
-    }
-
-    private fun matchedTestGroupIndex(test: Test): Int? {
-        if (test.conditions.isNotEmpty() && conditionEvaluator.evaluateAll(test.conditions) == false) return null
-        val groups = test.groups ?: return null
-        if (groups.isEmpty()) return null
-        val bucket = Bucketing.bucket(test.salt, localId)
-        val groupName = test.assignGroup(bucket) ?: return null
-        val idx = groups.indexOfFirst { it.name == groupName }
-        return if (idx >= 0) idx else null
-    }
+    /** The fingerprint path index the flag resolves to (0, the default, when absent). */
+    fun resolvePathIndex(flagKey: String): Int = resolve(flagKey)?.pathIndex ?: 0
 }

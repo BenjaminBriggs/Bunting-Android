@@ -1,9 +1,7 @@
 package com.bunting.model
 
-import kotlinx.serialization.Serializable
-
-/** An A/B test that deterministically buckets users into named groups. */
-@Serializable
+/** An A/B test that deterministically buckets users into named groups. A test with
+ *  no [groups] is valid but buckets nobody, so variants referencing it never match. */
 data class Test(
     val name: String,
     val description: String? = null,
@@ -25,5 +23,4 @@ data class Test(
     }
 }
 
-@Serializable
 data class TestGroup(val name: String, val percentage: Int)

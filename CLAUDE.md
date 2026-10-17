@@ -10,7 +10,7 @@ detached RS256 JWS offline, caches it, and evaluates all flags locally.
 ```
 bunting-verify/        # Detached-JWS RS256 verification (⇄ Swift BuntingVerify)
 bunting/               # Pure-JVM core (⇄ Swift Sources/Bunting)
-  com/bunting/model/       # Config artifact models; FlagValue decode precedence is contract
+  com/bunting/model/       # Config artifact models + ArtifactDecoder (v1 wire contract: tolerant, typed)
   com/bunting/evaluation/  # Bucketing, conditions, evaluator, fingerprint, memoization, ContextProvider seam
   com/bunting/storage/     # BootstrapConfig, Http, ConfigStore, KeyValueStore, OverridesStore
   com/bunting/identity/    # Per-install UUID
@@ -42,8 +42,16 @@ tests pass — re-sync from `../bunting-admin/conformance/` instead.
 (Java UUIDs must be uppercased); fingerprint MSB-first bit packing + CRC-8/SMBUS
 uppercase hex; strict JWS header order (`alg` → `b64` → `crit` → `kid`);
 verify-before-decode-before-cache; signature persisted before config; 304 counts as
-a successful fetch; `FlagValue` decode precedence Bool → Int → Double →
-(String → date → JSON → string).
+a successful fetch.
+
+**Wire contract (v1)** lives in `ArtifactDecoder`, mirroring the admin's
+`src/lib/artifact-decoder.ts`: one bad entry never rejects the artifact (bad flags are
+skipped, bad variants become never-matching placeholders that keep one fingerprint
+path, unknown conditions fail closed, malformed tests/rollouts are dropped); only the
+header is strict; values decode by the flag's declared type, never by shape. A test
+variant matches only when the user lands in a group that has a value, otherwise
+evaluation falls through. `FlagEvaluator.resolve` produces value and fingerprint path
+in one pass, so they cannot disagree.
 
 **Synchronous flag reads.** Accessors are lock-free snapshot reads, callable from any
 thread; only `refresh()`, `resetIdentity()`, `awaitInitialLoad()` suspend.

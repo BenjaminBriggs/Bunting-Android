@@ -113,6 +113,17 @@ BuntingInfoScreen()    // read-only: searchable flag list, details sheet (incl. 
 BuntingDebugScreen()   // adds override editing, clear-all, reset identity, environment switch
 ```
 
+## How configs are decoded and evaluated
+
+The SDK decodes `config.json` by the v1 wire contract. The admin's `src/lib/artifact-decoder.ts` is the reference, and the conformance bundle's `decoding` set pins it.
+
+- **One bad entry never rejects the artifact.** A flag with an unknown type, a missing environment, a default that doesn't match its type, or a `variants` that isn't an array is skipped, so its accessors return the call-site default. A variant with an unknown type, or a missing or mistyped value or reference, becomes a placeholder that never matches; one without an integer `order` is dropped. A condition with an unknown type or operator, or `values` that aren't all strings, never matches. A malformed test or rollout is dropped, and variants referencing it never match. Unknown keys are ignored. Everything skipped is logged through `java.util.logging` (`com.bunting.storage.ConfigStore`).
+- **Only the header is strict.** Invalid JSON, a `schema_version` other than 1, a missing `config_version` or `app_identifier`, a `published_at` that isn't an ISO-8601 UTC instant, or a `flags`/`tests`/`rollouts` container that isn't an object rejects the artifact. A rejected fetch fires `didCompleteFetch(false, error)`, keeps the active config (cache or seed), and waits for the normal fetch schedule before trying again.
+- **Values decode by the flag's declared type, never by their JSON shape.** `bool` is a JSON boolean; `int` a number with no fractional part (`2.0` is 2); `double` any finite number (`3` is 3.0); `string` any string, verbatim; `date` an ISO-8601 UTC instant on a real calendar date with 0 to 3 fraction digits (`2026-07-02T10:00:04Z`, `2026-07-02T10:00:04.796Z`); `json` a string holding JSON text, verbatim (`"42"` is valid, a raw object is not). Overrides convert by the declared type too.
+- **A/B tests.** A test variant serves a value only when the test's preconditions pass, the user buckets into a group, and that group has a value in the variant. Otherwise, including for users in the remainder when the groups sum to under 100, evaluation moves on to the next variant and then the default. The config fingerprint records the same path.
+
+`ArtifactDecoder.decode(text)` returns the decoded `BuntingConfiguration` together with every `DecodeIssue`; `BuntingConfiguration.serializer()` decodes by the same rules.
+
 ## Build & test
 
 **Android Studio:** open the repo root (`bunting-sdk-android/`), not `example/` — the example is a module of this multi-module build (unlike the Swift repo's standalone Xcode project) and has no Gradle build of its own. After sync, pick the `example` run configuration.

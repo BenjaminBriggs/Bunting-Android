@@ -5,10 +5,9 @@ import java.time.Instant
 /**
  * Typed read accessors over [FlagValue], mirroring the Swift `FlagValue`
  * extension. Every accessor returns null on a type mismatch except [doubleValue],
- * which coerces a whole-number [FlagValue.IntValue] to Double — the accessor half
- * of the whole-number-double contract (a `2.0` serializes as `2` and decodes as
- * IntValue, so a double-typed flag must still read as 2.0 rather than falling
- * through to the caller's default).
+ * which also reads a [FlagValue.IntValue] as a Double. Decoding already turns every
+ * value of a double-typed flag into a [FlagValue.DoubleValue] (a wire `2` included),
+ * so the coercion only matters for an int-typed flag read through `double()`.
  */
 
 /** The [FlagType] this value carries. */

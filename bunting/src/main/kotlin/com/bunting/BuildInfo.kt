@@ -6,5 +6,5 @@ object BuildInfo {
     // The conformance runner asserts the vendored `manifest.json` matches it,
     // so a stale vendored bundle fails loudly. Sync with:
     // `cp -R ../bunting-admin/conformance/. bunting/src/test/resources/conformance/`.
-    const val CONFORMANCE_BUNDLE_VERSION: String = "2026-07-02.2"
+    const val CONFORMANCE_BUNDLE_VERSION: String = "2026-10-17.2"
 }

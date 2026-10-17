@@ -96,7 +96,8 @@ class FlagInfoTest {
         val multiplier = flags.first { it.key == "store/multiplier" }
         assertEquals(FlagType.DOUBLE, multiplier.type)
         assertEquals("2.0", multiplier.effectiveValue)
-        assertEquals("2", multiplier.defaultValue)
+        // Decoded by the declared type, the wire `2` is the double 2.0, not an int.
+        assertEquals("2.0", multiplier.defaultValue)
     }
 
     @Test

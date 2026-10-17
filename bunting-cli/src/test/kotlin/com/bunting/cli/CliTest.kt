@@ -4,6 +4,7 @@ import com.bunting.verify.SignatureTransport
 import com.sun.net.httpserver.HttpServer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -86,6 +87,38 @@ class CliTest {
         server.start()
         val bootstrap = writeBootstrap(dir)
         assertEquals(ExitCode.SIGNATURE_ERROR, run(arrayOf(bootstrap.absolutePath, File(dir, "o.json").absolutePath)))
+    }
+
+    private fun serveSigned(body: String) {
+        val bytes = body.toByteArray(Charsets.UTF_8)
+        val jws = sign(bytes)
+        server.createContext("/config.json") { ex ->
+            ex.responseHeaders.add(SignatureTransport.HEADER_NAME, jws)
+            ex.sendResponseHeaders(200, bytes.size.toLong())
+            ex.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+    }
+
+    @Test
+    fun rejectedHeaderReturnsDecodeExit(@TempDir dir: File) {
+        serveSigned(configJson.replace("\"schema_version\":1", "\"schema_version\":2"))
+        val out = File(dir, "out.json")
+        assertEquals(ExitCode.DECODE_ERROR, run(arrayOf(writeBootstrap(dir).absolutePath, out.absolutePath)))
+        assertFalse(out.exists())
+    }
+
+    @Test
+    fun badEntriesStillDecodeAndSave(@TempDir dir: File) {
+        // One flag of an unknown type is skipped, not fatal: the verified bytes are saved as-is.
+        val body = configJson.replace(
+            "\"flags\":{}",
+            "\"flags\":{\"x\":{\"type\":\"color\",\"development\":{\"default\":\"red\"},\"beta\":{\"default\":\"red\"},\"production\":{\"default\":\"red\"}}}",
+        )
+        serveSigned(body)
+        val out = File(dir, "out.json")
+        assertEquals(0, run(arrayOf(writeBootstrap(dir).absolutePath, out.absolutePath)))
+        assertEquals(body, out.readText())
     }
 
     @Test

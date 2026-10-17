@@ -17,6 +17,14 @@ enum class BuntingEnvironment {
             PRODUCTION -> 2
         }
 
+    /** The environment's key in a flag object (`development`, `beta`, `production`). */
+    val wireName: String
+        get() = when (this) {
+            DEVELOPMENT -> "development"
+            BETA -> "beta"
+            PRODUCTION -> "production"
+        }
+
     companion object {
         fun fromWire(raw: String): BuntingEnvironment? = when (raw) {
             "development" -> DEVELOPMENT
