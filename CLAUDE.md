@@ -52,7 +52,11 @@ thread; only `refresh()`, `resetIdentity()`, `awaitInitialLoad()` suspend.
 kotlinx-serialization + coroutines; anything touching `android.*` lives in
 `:bunting-android` (Robolectric-tested) or above.
 
-**Codegen never fails the build** — missing/invalid seed emits a fallback file.
+**Codegen never fails the build over seed content** — missing/invalid seed emits a
+fallback file; unknown types and mismatched development defaults skip the flag with a
+warning. The one hard error is two keys mapping to the same Kotlin identifier.
+Generated accessors go through the default-returning `Bunting.bool(...)` facade, never
+`Bunting.instance` (which throws before `configure`).
 Generated dirs register on the **java** source set (`sources.kotlin` did not feed
 compileKotlin on AGP 8.9; the java wiring is kept on later AGP versions as the
 known-good path).

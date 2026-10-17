@@ -59,4 +59,7 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Bunting is a process-wide singleton: a fresh JVM per test class lets
+    // PreConfigureAccessTest observe the unconfigured state.
+    forkEvery = 1
 }

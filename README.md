@@ -53,17 +53,21 @@ buntingCodegen {
 }
 ```
 
-`store/use_new_paywall_design` then reads as `Bunting.store.useNewPaywallDesign` (Swift: `Bunting.shared.store.useNewPaywallDesign`). Codegen never fails the build: a missing or invalid seed generates a fallback file and string-based access keeps working.
+`store/use_new_paywall_design` then reads as `Bunting.store.useNewPaywallDesign` (Swift: `Bunting.shared.store.useNewPaywallDesign`). Accessors read through the `Bunting.bool(...)`-style facade, so before `Bunting.configure` runs they return the seed's development default instead of throwing.
+
+Defaults are read by each flag's declared `type`, never by JSON shape: `bool` is a JSON boolean, `int` a JSON integer, `double` any JSON number, `string` the string verbatim, `date` an ISO-8601 string (fractional seconds optional), and `json` a JSON-encoded string. A flag with an unknown type, or a development default that doesn't match its type, gets no accessor and a build warning. Flag keys that are Kotlin keywords are backticked and leading digits are prefixed with `_` (`2fa_enabled` becomes `Bunting._2faEnabled`).
+
+Codegen never fails the build over seed content: a missing or invalid seed generates a fallback file and string-based access keeps working. The one exception is two flags whose keys map to the same accessor (for example `dark_mode` and `dark-mode`): the build fails and names both keys, because one accessor would otherwise silently shadow the other.
 
 ### Fetching the latest config (Swift `FetchConfigPlugin` equivalent)
 
-The plugin also registers `fetchBuntingConfig`: it reads the module's bootstrap (`assets/bunting_config.json`), downloads `config.json` from the endpoint, verifies the detached RS256 JWS offline, and only then overwrites the seed (`assets/BuntingConfig.json`) — refreshing both the codegen input and the config bundled with the app. Run it from Android Studio's **Gradle tool window → (module) → Tasks → bunting → fetchBuntingConfig**, or:
+The plugin also registers `fetchBuntingConfig`: it reads the module's bootstrap (`assets/bunting_config.json`), downloads `config.json` from the endpoint, verifies the detached RS256 JWS offline, checks the payload is a usable seed (valid JSON, a `schema_version` this SDK supports, a `flags` object; flags codegen would skip are reported as warnings), and only then overwrites the seed (`assets/BuntingConfig.json`) — refreshing both the codegen input and the config bundled with the app. Run it from Android Studio's **Gradle tool window → (module) → Tasks → bunting → fetchBuntingConfig**, or:
 
 ```bash
 ./gradlew :app:fetchBuntingConfig
 ```
 
-On any fetch or verification failure the task fails without touching the existing seed.
+On any fetch, verification, or validation failure the task fails without touching the existing seed. The seed is saved without its signature on purpose: it ships inside the signed app, and the SDK treats it as unverified.
 
 ### Debug UI
 

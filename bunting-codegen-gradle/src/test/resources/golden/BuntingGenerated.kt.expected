@@ -4,77 +4,76 @@
 package com.example.bunting
 
 import com.bunting.Bunting
-import com.bunting.BuntingClient
 import java.time.Instant
 
 public val Bunting.features: FeaturesFlags
-    get() = FeaturesFlags(Bunting.instance)
+    get() = FeaturesFlags()
 
-public class FeaturesFlags internal constructor(private val bunting: BuntingClient) {
+public class FeaturesFlags internal constructor() {
     /** Discount percentage as decimal. Flag key: `features/discount_percentage`. Type: `double`. */
     public val discountPercentage: Double
-        get() = bunting.double("features/discount_percentage", 0.25)
+        get() = Bunting.double("features/discount_percentage", 0.25)
 
     /** Maximum items per page. Flag key: `features/max_items`. Type: `int`. */
     public val maxItems: Long
-        get() = bunting.int("features/max_items", 50L)
+        get() = Bunting.int("features/max_items", 50L)
 
     /** Maximum upload size in MB. Flag key: `features/max_upload_size`. Type: `int`. */
     public val maxUploadSize: Long
-        get() = bunting.int("features/max_upload_size", 100L)
+        get() = Bunting.int("features/max_upload_size", 100L)
 
     /** Show onboarding flow to new users. Flag key: `features/show_onboarding`. Type: `bool`. */
     public val showOnboarding: Boolean
-        get() = bunting.bool("features/show_onboarding", true)
+        get() = Bunting.bool("features/show_onboarding", true)
 }
 
 public val Bunting.layout: LayoutFlags
-    get() = LayoutFlags(Bunting.instance)
+    get() = LayoutFlags()
 
-public class LayoutFlags internal constructor(private val bunting: BuntingClient) {
+public class LayoutFlags internal constructor() {
     /** JSON configuration for home screen layout. Flag key: `layout/home_sections`. Type: `json`. */
     public val homeSections: ByteArray?
-        get() = bunting.jsonData("layout/home_sections")
+        get() = Bunting.jsonData("layout/home_sections")
 }
 
 public val Bunting.store: StoreFlags
-    get() = StoreFlags(Bunting.instance)
+    get() = StoreFlags()
 
-public class StoreFlags internal constructor(private val bunting: BuntingClient) {
+public class StoreFlags internal constructor() {
     /** Price multiplier for regional pricing. Flag key: `store/price_multiplier`. Type: `double`. */
     public val priceMultiplier: Double
-        get() = bunting.double("store/price_multiplier", 1.0)
+        get() = Bunting.double("store/price_multiplier", 1.0)
 
     /** Promotional banner text. Flag key: `store/promo_banner_text`. Type: `string`. */
     public val promoBannerText: String
-        get() = bunting.string("store/promo_banner_text", "50% Off - Limited Time!")
+        get() = Bunting.string("store/promo_banner_text", "50% Off - Limited Time!")
 
     /** End date for current promotion. Flag key: `store/promo_end_date`. Type: `date`. */
     public val promoEndDate: Instant
-        get() = bunting.date("store/promo_end_date", Instant.parse("2025-12-31T23:59:59Z"))
+        get() = Bunting.date("store/promo_end_date", Instant.parse("2025-12-31T23:59:59Z"))
 
     /** Percentage discount for subscriptions. Flag key: `store/subscription_discount`. Type: `int`. */
     public val subscriptionDiscount: Long
-        get() = bunting.int("store/subscription_discount", 20L)
+        get() = Bunting.int("store/subscription_discount", 20L)
 
     /** Enable the new paywall design. Flag key: `store/use_new_paywall_design`. Type: `bool`. */
     public val useNewPaywallDesign: Boolean
-        get() = bunting.bool("store/use_new_paywall_design", false)
+        get() = Bunting.bool("store/use_new_paywall_design", false)
 }
 
 public val Bunting.ui: UiFlags
-    get() = UiFlags(Bunting.instance)
+    get() = UiFlags()
 
-public class UiFlags internal constructor(private val bunting: BuntingClient) {
+public class UiFlags internal constructor() {
     /** Enable UI animations. Flag key: `ui/enable_animations`. Type: `bool`. */
     public val enableAnimations: Boolean
-        get() = bunting.bool("ui/enable_animations", true)
+        get() = Bunting.bool("ui/enable_animations", true)
 
     /** Primary theme color (hex). Flag key: `ui/theme_color`. Type: `string`. */
     public val themeColor: String
-        get() = bunting.string("ui/theme_color", "#007AFF")
+        get() = Bunting.string("ui/theme_color", "#007AFF")
 
     /** Welcome message shown to users. Flag key: `ui/welcome_message`. Type: `string`. */
     public val welcomeMessage: String
-        get() = bunting.string("ui/welcome_message", "Welcome to Bunting!")
+        get() = Bunting.string("ui/welcome_message", "Welcome to Bunting!")
 }
