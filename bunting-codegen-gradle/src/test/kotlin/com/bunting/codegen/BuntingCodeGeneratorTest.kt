@@ -204,7 +204,7 @@ class BuntingCodeGeneratorTest {
         assertTrue(generated.contains("public val Bunting.`in`: Boolean"))
         assertTrue(generated.contains("public val Bunting.`object`: ObjectFlags"))
         assertTrue(generated.contains("public class ObjectFlags internal constructor()"))
-        assertTrue(generated.contains("    @get:JvmName(\"getClass_\")\n    public val `class`: Long"))
+        assertTrue(generated.contains("    public val `class`: Long"))
         assertTrue(generated.contains("public val `when`: Boolean"))
     }
 

@@ -228,8 +228,6 @@ object BuntingCodeGenerator {
             if (index > 0) append('\n')
             append(kdoc(spec, "    "))
             if (spec.deprecated) append("    @Deprecated(\"Flag archived\")\n")
-            // A member `class` property's getter would clash with Object.getClass().
-            if (spec.propertyName == "class") append("    @get:JvmName(\"getClass_\")\n")
             append("    public val ${identifier(spec.propertyName)}: ${spec.kind.kotlinType}\n")
             append("        get() = ${accessorCall(spec)}\n")
         }
