@@ -6,7 +6,8 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
-import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.YearMonth
 import java.time.ZoneOffset
 
 /**
@@ -19,8 +20,8 @@ internal object WireContract {
     /** JSON number grammar (RFC 8259). kotlinx keeps unquoted tokens as raw text, so this is checked here. */
     private val JSON_NUMBER = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?")
 
-    /** An ISO-8601 UTC instant, with or without fractional seconds. Offsets other than `Z` are invalid. */
-    private val ISO_INSTANT = Regex("([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\\.([0-9]+))?Z")
+    /** An ISO-8601 UTC instant with at most millisecond precision. Offsets other than `Z` are invalid. */
+    private val ISO_INSTANT = Regex("([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\\.([0-9]{1,3}))?Z")
 
     /** `Number.MAX_SAFE_INTEGER`: 2^53 - 1. */
     private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991.0
@@ -57,15 +58,14 @@ internal object WireContract {
     fun string(element: JsonElement?): String? =
         (element as? JsonPrimitive)?.takeIf { it !is JsonNull && it.isString }?.content
 
-    /** date: a string holding an ISO-8601 UTC instant that `Date.parse` accepts. */
+    /** date: a string holding an ISO-8601 UTC instant that names a real calendar moment. */
     fun instant(element: JsonElement?): Instant? = string(element)?.let(::parseInstant)
 
     /**
-     * Reads [raw] the way the reference's `Date.parse` (V8) does once the string
-     * matches the pattern: month 01-12, day 01-31 with a day past the month's end
-     * rolling over (`02-30` is 2 March), hour 00-23 or `24:00:00` as the next
-     * midnight, minute and second 00-59, and milliseconds from the first three
-     * fraction digits. Null when `Date.parse` would return NaN.
+     * [raw] as an instant when it matches the pattern and names a real calendar
+     * moment: year 0001-9999, month 1-12, day within the month (leap years counted), hour 0-23,
+     * minute and second 0-59. Nothing rolls over: `02-30`, `24:00:00` and second
+     * 60 are invalid, like more than three fraction digits or any offset.
      */
     fun parseInstant(raw: String): Instant? {
         val match = ISO_INSTANT.matchEntire(raw) ?: return null
@@ -76,12 +76,11 @@ internal object WireContract {
         val hour = fields[3]
         val minute = fields[4]
         val second = fields[5]
-        val millis = match.groups[8]?.value.orEmpty().padEnd(3, '0').take(3).toInt()
-        if (month !in 1..12 || day !in 1..31 || minute !in 0..59 || second !in 0..59) return null
-        if (hour !in 0..23 && (hour != 24 || minute != 0 || second != 0 || millis != 0)) return null
-        return LocalDate.of(year, month, 1).plusDays(day - 1L).atStartOfDay(ZoneOffset.UTC).toInstant()
-            .plusSeconds(hour * 3600L + minute * 60L + second)
-            .plusMillis(millis.toLong())
+        // YearMonth counts Gregorian leap years: divisible by 4 and not by 100, or by 400.
+        if (year < 1 || month !in 1..12 || day !in 1..YearMonth.of(year, month).lengthOfMonth()) return null
+        if (hour > 23 || minute > 59 || second > 59) return null
+        val millis = match.groups[8]?.value.orEmpty().padEnd(3, '0').toLong()
+        return LocalDateTime.of(year, month, day, hour, minute, second).toInstant(ZoneOffset.UTC).plusMillis(millis)
     }
 
     /**

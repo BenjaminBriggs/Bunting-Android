@@ -95,8 +95,8 @@ class SeedValidatorTest {
         assertEquals(reason, rejection(artifact("published_at" to "\"2026-01-32T00:00:00Z\"")))
         assertEquals(reason, rejection(artifact("published_at" to "1751414400000")))
         assertDoesNotThrow { validate(artifact("published_at" to "\"2026-07-02T00:00:00Z\"")) }
-        // Date.parse rolls 30 February over to 2 March rather than rejecting it.
-        assertDoesNotThrow { validate(artifact("published_at" to "\"2026-02-30T00:00:00Z\"")) }
+        assertEquals(reason, rejection(artifact("published_at" to "\"2026-02-30T00:00:00Z\"")))
+        assertEquals(reason, rejection(artifact("published_at" to "\"2026-07-02T00:00:00.0001Z\"")))
     }
 
     @Test

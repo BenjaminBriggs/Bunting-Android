@@ -107,20 +107,22 @@ class BuntingCodeGeneratorTest {
     }
 
     @Test
-    fun dateValuesAreReadTheWayDateParseReadsThem() {
+    fun datesMustNameARealCalendarMomentWithAtMostMilliseconds() {
         fun literal(raw: String): String? = BuntingCodeGenerator.defaultLiteral(
             BuntingCodeGenerator.FlagKind.DATE, kotlinx.serialization.json.JsonPrimitive(raw),
         )
-        // Milliseconds come from the first three fraction digits.
-        assertEquals("""Instant.parse("2026-07-02T10:00:04.796Z")""", literal("2026-07-02T10:00:04.7969Z"))
-        assertEquals("""Instant.parse("2026-07-02T10:00:04Z")""", literal("2026-07-02T10:00:04.0000000001Z"))
-        // A day past the month's end rolls over, and 24:00:00 is the next midnight.
-        assertEquals("""Instant.parse("2026-03-02T00:00:00Z")""", literal("2026-02-30T00:00:00Z"))
-        assertEquals("""Instant.parse("2026-01-02T00:00:00Z")""", literal("2026-01-01T24:00:00.000Z"))
-        // Date.parse returns NaN for these.
+        assertEquals("""Instant.parse("2026-07-02T10:00:04.796Z")""", literal("2026-07-02T10:00:04.796Z"))
+        assertEquals("""Instant.parse("2026-07-02T10:00:04.500Z")""", literal("2026-07-02T10:00:04.5Z"))
+        assertEquals("""Instant.parse("2024-02-29T23:59:59Z")""", literal("2024-02-29T23:59:59Z"))
+        assertEquals("""Instant.parse("2000-02-29T00:00:00Z")""", literal("2000-02-29T00:00:00Z"))
+        assertEquals("""Instant.parse("0001-01-01T00:00:00Z")""", literal("0001-01-01T00:00:00Z"))
+        assertEquals("""Instant.parse("9999-12-31T23:59:59.999Z")""", literal("9999-12-31T23:59:59.999Z"))
+        // Nothing rolls over, and nothing finer than a millisecond is accepted.
         for (invalid in listOf(
-            "2026-01-01T24:00:00.5Z", "2025-12-31T23:59:60Z", "2026-13-01T00:00:00Z", "2026-00-10T00:00:00Z",
-            "2026-01-00T00:00:00Z", "2026-01-32T00:00:00Z", "2026-01-01T00:60:00Z", "2026-01-01T25:00:00Z",
+            "0000-01-01T00:00:00Z", "1900-02-29T00:00:00Z", "2026-02-29T00:00:00Z", "2026-02-30T00:00:00Z", "2026-04-31T00:00:00Z", "2026-01-01T24:00:00Z",
+            "2026-01-01T24:00:00.000Z", "2025-12-31T23:59:60Z", "2026-13-01T00:00:00Z", "2026-00-10T00:00:00Z",
+            "2026-01-00T00:00:00Z", "2026-01-32T00:00:00Z", "2026-01-01T00:60:00Z", "2026-07-02T10:00:04.7969Z",
+            "2026-07-02T10:00:04.Z", "2026-07-02T10:00:04+00:00",
         )) {
             assertEquals(null, literal(invalid), invalid)
         }
