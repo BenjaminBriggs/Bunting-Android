@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -46,7 +47,8 @@ class BuntingClientTest {
              "production":{"default":false,"variants":[{"type":"conditional","order":1,"value":true,
                "conditions":[{"type":"platform","operator":"in","values":["android"]}]}]}},
            "m/d":{"type":"double","development":{"default":2},"beta":{"default":2},"production":{"default":2}},
-           "s/tier":{"type":"string","development":{"default":"dev"},"beta":{"default":"beta"},"production":{"default":"prod"}}
+           "s/tier":{"type":"string","development":{"default":"dev"},"beta":{"default":"beta"},"production":{"default":"prod"}},
+           "j/layout":{"type":"json","development":{"default":"{}"},"beta":{"default":"{}"},"production":{"default":"{\"a\":1}"}}
          },"tests":{},"rollouts":{}}
     """.trimIndent()
 
@@ -158,8 +160,33 @@ class BuntingClientTest {
         serveSigned()
         val c = client(options(dir))
         c.awaitInitialLoad()
-        // A whole-number JSON default `2` decodes as IntValue(2); double() coerces to 2.0.
+        // A whole-number default `2` on a double-typed flag decodes as the double 2.0.
         assertEquals(2.0, c.double("m/d", 0.0))
+        // Values never decode by shape: the double flag does not read as an int.
+        assertEquals(-1L, c.int("m/d", -1L))
+    }
+
+    @Test
+    fun overridesFollowTheDeclaredFlagType(@TempDir dir: File) = runBlocking {
+        currentConfig = evalConfig
+        serveSigned()
+        val c = client(options(dir))
+        c.awaitInitialLoad()
+        assertEquals("""{"a":1}""", c.jsonData("j/layout")?.decodeToString())
+
+        // A string override on a json flag is JSON, exactly like a served value.
+        c.setOverride("j/layout", OverrideValue.StringValue("[1]"))
+        assertEquals("[1]", c.jsonData("j/layout")?.decodeToString())
+        assertEquals("fallback", c.string("j/layout", "fallback"))
+
+        // A string override on a string flag stays a string, so it never reads as JSON.
+        c.setOverride("s/tier", OverrideValue.StringValue("[1]"))
+        assertEquals("[1]", c.string("s/tier", "x"))
+        assertNull(c.jsonData("s/tier"))
+
+        // A flag the config doesn't have falls back to the caller default's type.
+        c.setOverride("not/in/config", OverrideValue.StringValue("[2]"))
+        assertEquals("[2]", c.jsonData("not/in/config")?.decodeToString())
     }
 
     @Test

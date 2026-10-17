@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -19,6 +20,9 @@ import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.util.Base64
+import java.util.logging.Handler
+import java.util.logging.LogRecord
+import java.util.logging.Logger
 
 class ConfigStoreSeedTest {
 
@@ -121,6 +125,65 @@ class ConfigStoreSeedTest {
         val state = store.getConfigState()
         assertNull(state.configuration)
         assertNull(state.source)
+    }
+
+    /** Collects the store's log messages while [block] runs. */
+    private fun capturingLogs(block: () -> Unit): List<String> {
+        val messages = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val handler = object : Handler() {
+            override fun publish(record: LogRecord) { messages += record.message }
+            override fun flush() {}
+            override fun close() {}
+        }
+        val logger = Logger.getLogger("com.bunting.storage.ConfigStore")
+        logger.addHandler(handler)
+        try { block() } finally { logger.removeHandler(handler) }
+        return messages.toList()
+    }
+
+    @Test
+    fun corruptSeedIsLogged(@TempDir dir: File) {
+        val messages = capturingLogs {
+            runBlocking {
+                ConfigStore(bootstrap(), dir, seedLoader = { seedJson.replace("\"schema_version\":1", "\"schema_version\":3").toByteArray() })
+                    .loadCachedConfigIfNeeded()
+            }
+        }
+        assertTrue(messages.any { it.contains("Bundled seed") && it.contains("unsupported schema_version 3") }, "$messages")
+    }
+
+    @Test
+    fun seedWithBadEntriesLoadsAndLogsThem(@TempDir dir: File) {
+        val seed = seedJson.replace(
+            "\"flags\":{}",
+            "\"flags\":{\"ok\":{\"type\":\"int\",\"development\":{\"default\":1},\"beta\":{\"default\":1},\"production\":{\"default\":1}}," +
+                "\"bad\":{\"type\":\"int\",\"development\":{\"default\":\"1\"},\"beta\":{\"default\":1},\"production\":{\"default\":1}}}",
+        )
+        lateinit var store: ConfigStore
+        val messages = capturingLogs {
+            store = ConfigStore(bootstrap(), dir, seedLoader = { seed.toByteArray() })
+            runBlocking { store.loadCachedConfigIfNeeded() }
+        }
+        val config = runBlocking { store.getConfigState().configuration }
+        assertEquals(setOf("ok"), config!!.flags.keys)
+        assertTrue(messages.any { it.contains("skipped_flag flags[\"bad\"]") }, "$messages")
+    }
+
+    @Test
+    fun cacheThatNoLongerDecodesFallsBackToSeed(@TempDir dir: File) {
+        // An authentic cache whose header this SDK rejects: discarded, seed used, logged.
+        val bad = configJson.replace("\"schema_version\":1", "\"schema_version\":2").toByteArray(Charsets.UTF_8)
+        val cacheDir = File(dir, "Bunting").apply { mkdirs() }
+        File(cacheDir, "config_v1.json.sig").writeText(sign(bad, "k1"))
+        File(cacheDir, "config_v1.json").writeBytes(bad)
+        lateinit var store: ConfigStore
+        val messages = capturingLogs {
+            store = ConfigStore(bootstrap(), dir, seedLoader = { seedJson.toByteArray(Charsets.UTF_8) })
+            runBlocking { store.loadCachedConfigIfNeeded() }
+        }
+        assertEquals(ConfigSource.SEED, runBlocking { store.getConfigState().source })
+        assertFalse(File(cacheDir, "config_v1.json").exists())
+        assertTrue(messages.any { it.contains("Cached config") }, "$messages")
     }
 
     @Test

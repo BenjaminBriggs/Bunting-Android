@@ -1,6 +1,7 @@
 package com.bunting.cli
 
-import com.bunting.model.BuntingConfiguration
+import com.bunting.model.ArtifactDecoder
+import com.bunting.model.ArtifactRejectedException
 import com.bunting.model.BuntingJson
 import com.bunting.storage.BootstrapConfig
 import com.bunting.verify.JwsVerifier
@@ -79,12 +80,15 @@ fun run(args: Array<String>): Int {
     }
     println("Signature verified")
 
-    val config = try {
-        BuntingJson.decodeFromString(BuntingConfiguration.serializer(), data.toString(Charsets.UTF_8))
-    } catch (e: Exception) {
-        System.err.println("Error: config decode failed: ${e.message}")
+    val decoded = try {
+        ArtifactDecoder.decode(data.toString(Charsets.UTF_8))
+    } catch (e: ArtifactRejectedException) {
+        System.err.println("Error: config decode failed: ${e.reason}")
         return ExitCode.DECODE_ERROR
     }
+    // Entries the SDK would skip or neutralise; the config is still usable.
+    for (issue in decoded.issues) System.err.println("Warning: $issue")
+    val config = decoded.configuration
     println("Schema version: ${config.schemaVersion}")
     println("Config version: ${config.configVersion}")
     println("App identifier: ${config.appIdentifier}")

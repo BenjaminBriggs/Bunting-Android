@@ -1,5 +1,7 @@
 package com.bunting.storage
 
+import com.bunting.model.ArtifactDecoder
+import com.bunting.model.ArtifactRejectedException
 import com.bunting.model.BuntingConfiguration
 import com.bunting.model.BuntingJson
 import com.bunting.model.ConfigSource
@@ -10,6 +12,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
+import java.util.logging.Logger
 
 class ConfigStoreException(message: String) : Exception(message)
 
@@ -18,6 +21,10 @@ class ConfigStoreException(message: String) : Exception(message)
  * all state access (the coroutine analogue of the Swift actor). Ordering guarantees:
  * conditional GET, 304-as-success, verify → decode → cache, signature-first atomic
  * writes, and cache re-verification on load.
+ *
+ * Decoding follows the v1 wire contract ([ArtifactDecoder]): entries it skips or
+ * drops are logged, and only a bad header rejects an artifact. A rejected fetch
+ * keeps the active config and reports a failed fetch.
  */
 class ConfigStore(
     private val bootstrap: BootstrapConfig,
@@ -28,6 +35,7 @@ class ConfigStore(
     private val listener: ConfigStoreListener? = null,
 ) {
     private val mutex = Mutex()
+    private val logger = Logger.getLogger("com.bunting.storage.ConfigStore")
 
     private var activeConfig: BuntingConfiguration? = null
     private var activeSource: ConfigSource? = null
@@ -65,12 +73,13 @@ class ConfigStore(
     }
 
     /** Decodes the optional bundled seed (source = SEED, unsigned). A missing or
-     *  corrupt seed leaves the store empty rather than throwing. */
+     *  corrupt seed leaves the store empty rather than throwing; a corrupt one is logged. */
     private fun loadSeed() {
         val bytes = seedLoader?.invoke() ?: return
         val config = try {
-            BuntingJson.decodeFromString(BuntingConfiguration.serializer(), bytes.toString(Charsets.UTF_8))
-        } catch (_: Exception) {
+            decodeArtifact(bytes, "Bundled seed")
+        } catch (e: Exception) {
+            logger.warning("Bundled seed config could not be decoded and was ignored: ${describe(e)}")
             return
         }
         activeConfig = config
@@ -128,8 +137,19 @@ class ConfigStore(
         }
         listener?.didVerifySignature(true)
 
-        val newConfig = BuntingJson.decodeFromString(
-            BuntingConfiguration.serializer(), data.toString(Charsets.UTF_8))
+        val newConfig = try {
+            decodeArtifact(data, "Fetched")
+        } catch (e: Exception) {
+            // The artifact is authentic but unusable (bad header). Keep the active config,
+            // and record the attempt so the next refresh waits for the normal schedule:
+            // the rate limit survives a restart, and a completed forced fetch doesn't
+            // force another full GET on every refresh.
+            logger.warning("Fetched config was rejected; keeping the current config: ${describe(e)}")
+            if (forceRefresh) lastTtlRefreshMillis = nowMillis()
+            saveMetadata()
+            listener?.didCompleteFetch(false, e)
+            throw e
+        }
         saveToCache(data, jws)
 
         activeConfig = newConfig
@@ -161,8 +181,9 @@ class ConfigStore(
             deleteCacheFiles(); return false
         }
         val config = try {
-            BuntingJson.decodeFromString(BuntingConfiguration.serializer(), data.toString(Charsets.UTF_8))
-        } catch (_: Exception) {
+            decodeArtifact(data, "Cached")
+        } catch (e: Exception) {
+            logger.warning("Cached config could not be decoded and was discarded: ${describe(e)}")
             deleteCacheFiles(); return false
         }
         activeConfig = config
@@ -172,6 +193,19 @@ class ConfigStore(
         listener?.didLoadCachedConfig(config.configVersion)
         return true
     }
+
+    /** Decodes by the v1 wire contract, logging every entry that was skipped, dropped,
+     *  or neutralised. Throws [ArtifactRejectedException] for a bad header. */
+    private fun decodeArtifact(data: ByteArray, origin: String): BuntingConfiguration {
+        val result = ArtifactDecoder.decode(data.toString(Charsets.UTF_8))
+        for (issue in result.issues) {
+            logger.warning("$origin config ${result.configuration.configVersion}: $issue")
+        }
+        return result.configuration
+    }
+
+    private fun describe(e: Exception): String =
+        (e as? ArtifactRejectedException)?.reason ?: e.message ?: e.javaClass.simpleName
 
     /** Signature written first: a crash mid-write yields a stale-config/new-sig pair
      *  that fails re-verification, never a silently unverified config. */

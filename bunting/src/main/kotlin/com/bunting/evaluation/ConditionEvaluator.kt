@@ -9,7 +9,17 @@ class ConditionEvaluator(
     private val context: EvaluationContext,
     private val customAttributeResolver: CustomAttributeResolver,
 ) {
-    fun evaluate(condition: Condition): Boolean = when (condition.type) {
+    fun evaluate(condition: Condition): Boolean {
+        // Fail closed: a condition this SDK couldn't decode never matches. Checking the
+        // operator here too keeps custom_attribute (which ignores it) closed.
+        if (condition.type == ConditionType.UNRECOGNIZED || condition.operator == ConditionOperator.UNRECOGNIZED) {
+            return false
+        }
+        return evaluateKnown(condition)
+    }
+
+    private fun evaluateKnown(condition: Condition): Boolean = when (condition.type) {
+        ConditionType.UNRECOGNIZED -> false
         ConditionType.OS_VERSION -> evaluateVersion(condition, context.osVersion)
         ConditionType.APP_VERSION -> evaluateVersion(condition, context.appVersion)
         ConditionType.BUILD_NUMBER -> evaluateNumeric(condition, context.buildNumber.toIntOrNull() ?: 0)

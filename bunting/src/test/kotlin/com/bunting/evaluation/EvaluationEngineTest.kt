@@ -1,5 +1,6 @@
 package com.bunting.evaluation
 
+import com.bunting.model.ArtifactDecoder
 import com.bunting.model.BuntingConfiguration
 import com.bunting.model.BuntingEnvironment
 import com.bunting.model.BuntingJson
@@ -99,5 +100,126 @@ class EvaluationEngineTest {
         assertEquals(FlagValue.BoolValue(true), onAndroid.evaluate("f/gate"))
         val onIos = FlagEvaluator(config, BuntingEnvironment.PRODUCTION, ctx(platform = "ios"), id) { false }
         assertEquals(FlagValue.BoolValue(false), onIos.evaluate("f/gate"))
+    }
+
+    // MARK: fail-closed conditions (C1)
+
+    @Test
+    fun unrecognizedConditionsNeverMatch() {
+        val e = ConditionEvaluator(ctx()) { true }
+        assertFalse(e.evaluate(Condition.UNRECOGNIZED))
+        // custom_attribute ignores its operator, so an unrecognized one must still fail closed.
+        assertFalse(e.evaluate(Condition(ConditionType.CUSTOM_ATTRIBUTE, listOf("manufacturer", "google"), ConditionOperator.UNRECOGNIZED)))
+        assertFalse(e.evaluate(Condition(ConditionType.PLATFORM, listOf("android"), ConditionOperator.UNRECOGNIZED)))
+        assertFalse(e.evaluateAll(listOf(Condition(ConditionType.PLATFORM, listOf("android"), ConditionOperator.IN), Condition.UNRECOGNIZED)))
+    }
+
+    // MARK: test assignment (C3) and placeholders
+
+    private val header =
+        """"schema_version":1,"config_version":"c3-1","published_at":"2026-07-02T00:00:00Z","app_identifier":"demo""""
+
+    /** A string flag whose environments all share [variants], default "default". */
+    private fun config(variants: String, tests: String = "{}", rollouts: String = "{}"): BuntingConfiguration {
+        val env = """{"default":"default","variants":$variants}"""
+        val text = """{$header,"flags":{"f":{"type":"string","development":$env,"beta":$env,"production":$env}},
+            "tests":$tests,"rollouts":$rollouts}"""
+        return ArtifactDecoder.decode(text).configuration
+    }
+
+    /** The first canonical test identity whose bucket for [salt] falls in [buckets]. */
+    private fun idInBuckets(salt: String, buckets: IntRange): UUID =
+        (1..10_000).asSequence()
+            .map { UUID.fromString("AAAAAAAA-0000-4000-8000-%012d".format(it)) }
+            .first { Bucketing.bucket(salt, it) in buckets }
+
+    private fun evaluator(config: BuntingConfiguration, id: UUID, context: EvaluationContext = ctx()) =
+        FlagEvaluator(config, BuntingEnvironment.PRODUCTION, context, id) { false }
+
+    private val remainderTest = """{"exp":{"salt":"exp-salt","groups":[{"name":"a","percentage":30},{"name":"b","percentage":30}]}}"""
+
+    @Test
+    fun remainderUsersFallThroughToTheNextVariantThenDefault() {
+        val withNext = config(
+            """[{"type":"test","order":1,"test":"exp","values":{"a":"A","b":"B"}},
+                {"type":"conditional","order":2,"value":"next"}]""",
+            tests = remainderTest,
+        )
+        // Paths: 0 default, 1 group a, 2 group b, 3 conditional.
+        val inA = evaluator(withNext, idInBuckets("exp-salt", 1..30))
+        assertEquals(FlagValue.StringValue("A"), inA.evaluate("f"))
+        assertEquals(1, inA.resolvePathIndex("f"))
+        val inB = evaluator(withNext, idInBuckets("exp-salt", 31..60))
+        assertEquals(FlagValue.StringValue("B"), inB.evaluate("f"))
+        assertEquals(2, inB.resolvePathIndex("f"))
+        // Before C3 a remainder user got the first group's value while the fingerprint
+        // said "no match"; now both agree on the next variant.
+        val remainder = evaluator(withNext, idInBuckets("exp-salt", 61..100))
+        assertEquals(FlagValue.StringValue("next"), remainder.evaluate("f"))
+        assertEquals(3, remainder.resolvePathIndex("f"))
+
+        val alone = config("""[{"type":"test","order":1,"test":"exp","values":{"a":"A","b":"B"}}]""", tests = remainderTest)
+        val remainderAlone = evaluator(alone, idInBuckets("exp-salt", 61..100))
+        assertEquals(FlagValue.StringValue("default"), remainderAlone.evaluate("f"))
+        assertEquals(0, remainderAlone.resolvePathIndex("f"))
+    }
+
+    @Test
+    fun aGroupWithoutAValueSkipsTheVariant() {
+        val c = config("""[{"type":"test","order":1,"test":"exp","values":{"a":"A"}}]""", tests = remainderTest)
+        val inB = evaluator(c, idInBuckets("exp-salt", 31..60))
+        assertEquals(FlagValue.StringValue("default"), inB.evaluate("f"))
+        assertEquals(0, inB.resolvePathIndex("f"))
+        assertEquals(3, inB.pathCount("f")) // the group still owns a path
+    }
+
+    @Test
+    fun grouplessAndPreconditionedTestsDoNotMatch() {
+        val tests = """{
+          "groupless":{"salt":"s"},
+          "empty":{"salt":"s","groups":[]},
+          "ios_only":{"salt":"s","conditions":[{"type":"platform","operator":"in","values":["ios"]}],"groups":[{"name":"all","percentage":100}]},
+          "unknown_pre":{"salt":"s","conditions":[{"type":"moon_phase","operator":"in","values":["full"]}],"groups":[{"name":"all","percentage":100}]},
+          "android_only":{"salt":"s","conditions":[{"type":"platform","operator":"in","values":["android"]}],"groups":[{"name":"all","percentage":100}]}
+        }"""
+        val c = config(
+            """[{"type":"test","order":1,"test":"groupless","values":{"all":"x"}},
+                {"type":"test","order":2,"test":"empty","values":{"all":"x"}},
+                {"type":"test","order":3,"test":"ios_only","values":{"all":"ios"}},
+                {"type":"test","order":4,"test":"unknown_pre","values":{"all":"unknown"}},
+                {"type":"test","order":5,"test":"missing","values":{"all":"missing"}},
+                {"type":"test","order":6,"test":"android_only","values":{"all":"android"}}]""",
+            tests = tests,
+        )
+        val e = evaluator(c, idInBuckets("s", 1..100))
+        assertEquals(FlagValue.StringValue("android"), e.evaluate("f"))
+        // Groupless, empty and missing tests own no paths; ios_only and unknown_pre own one each.
+        assertEquals(3, e.resolvePathIndex("f"))
+        assertEquals(4, e.pathCount("f"))
+    }
+
+    @Test
+    fun placeholdersNeverMatchButKeepTheirPath() {
+        val c = config(
+            """[{"type":"geo_fence","order":1,"value":"x"},
+                {"type":"conditional","order":2,"value":5},
+                {"type":"conditional","order":3,"value":"unknown-op","conditions":[{"type":"platform","operator":"regex","values":["android"]}]},
+                {"type":"rollout","order":4,"rollout":"gone","value":"r"},
+                {"type":"conditional","order":5,"value":"hit","conditions":[{"type":"platform","operator":"in","values":["android"]}]}]""",
+        )
+        val e = evaluator(c, idInBuckets("s", 1..100))
+        assertEquals(FlagValue.StringValue("hit"), e.evaluate("f"))
+        assertEquals(5, e.resolvePathIndex("f"))
+        assertEquals(6, e.pathCount("f"))
+    }
+
+    @Test
+    fun variantsEvaluateInOrderNotWireOrder() {
+        val c = config(
+            """[{"type":"conditional","order":2,"value":"second"},{"type":"conditional","order":1,"value":"first"}]""",
+        )
+        val e = evaluator(c, idInBuckets("s", 1..100))
+        assertEquals(FlagValue.StringValue("first"), e.evaluate("f"))
+        assertEquals(1, e.resolvePathIndex("f"))
     }
 }

@@ -159,18 +159,21 @@ class BuntingClient(
 
     /**
      * Evaluation order (mirrors Swift evaluateFlagSync): a type-matched override →
-     * memo cache → [FlagEvaluator] → the caller default. A wrong-typed override
+     * memo cache → [FlagEvaluator] → the caller default. An override converts by the
+     * flag's declared type when the loaded config has the flag (else by the caller
+     * default's type), so it reads exactly like a served value; a wrong-typed override
      * falls through. Fires didFallbackToDefault when no config/identity is loaded or
      * the flag key is absent, and didReadDeprecatedFlag once per key per config version.
      */
     private fun evaluateFlag(key: String, default: FlagValue): FlagValue {
         val snap = snapshotRef.get()
+        val config = snap.configuration
 
         snap.overrides[key]?.let { override ->
-            convertOverrideToFlagValue(override, default.flagType)?.let { return it }
+            val type = config?.flags?.get(key)?.type ?: default.flagType
+            convertOverrideToFlagValue(override, type)?.let { return it }
         }
 
-        val config = snap.configuration
         if (config == null) {
             eventsListener?.didFallbackToDefault(key)
             return default

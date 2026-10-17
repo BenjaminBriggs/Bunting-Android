@@ -1,10 +1,7 @@
 package com.bunting.model
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
-/** A feature flag with per-environment configuration. */
-@Serializable
+/** A feature flag with per-environment configuration. Every value in it (defaults
+ *  and variant values) carries the flag's declared [type]; see [ArtifactDecoder]. */
 data class Flag(
     val type: FlagType,
     val description: String? = null,
@@ -20,9 +17,9 @@ data class Flag(
     }
 }
 
-/** Environment-specific flag configuration: an ordered variant list plus a default. */
-@Serializable
+/** Environment-specific flag configuration: a variant list (in wire order; evaluation
+ *  sorts by `order`) plus a default. */
 data class EnvironmentConfig(
-    @SerialName("default") val defaultValue: FlagValue,
+    val defaultValue: FlagValue,
     val variants: List<Variant> = emptyList(),
 )
