@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generates example-local's bootstrap from a locally running bunting-admin stack.
 #
-# Reads the app's active signing key(s) straight from the admin's dockerized
+# Reads the app's trusted signing keys straight from the admin's dockerized
 # Postgres (the bootstrap API requires an OIDC session, so it is not scriptable),
 # and points the endpoint at the admin's public MinIO bucket. 10.0.2.2 is the
 # Android emulator's alias for the host's localhost.
@@ -23,13 +23,16 @@ if ! docker ps --format '{{.Names}}' | grep -q '^bunting-postgres$'; then
   exit 1
 fi
 
+# Every key the app trusts (active and standby), active first, exactly like the
+# admin's bootstrap download.
 KEYS=$(docker exec bunting-postgres psql -U admin -d bunting_admin -t -A -c \
-  "select coalesce(json_agg(json_build_object('kid', sk.kid, 'pem', sk.public_key)), '[]'::json)
+  "select coalesce(json_agg(json_build_object('kid', sk.kid, 'pem', sk.public_key)
+                            order by sk.status = 'active' desc, sk.created_at), '[]'::json)
    from signing_keys sk join apps a on a.id = sk.app_id
-   where a.identifier = '$APP' and sk.is_active")
+   where a.identifier = '$APP' and sk.status <> 'retired'")
 
 if [ -z "$KEYS" ] || [ "$KEYS" = "[]" ]; then
-  echo "error: no active signing key for app '$APP' — create the app in the admin dashboard (http://localhost:3000) first" >&2
+  echo "error: no signing keys for app '$APP' — create the app in the admin dashboard (http://localhost:3000) first" >&2
   exit 1
 fi
 
