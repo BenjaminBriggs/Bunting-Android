@@ -223,4 +223,39 @@ class ConfigStoreTest {
         assertThrows(Exception::class.java) { runBlocking { store.refresh() } }
         runBlocking { assertNull(store.getConfigState().configuration) }
     }
+
+    @Test
+    fun serverErrorReportsAFailedFetch(@TempDir dir: File) {
+        server.createContext("/config.json") { ex -> ex.sendResponseHeaders(500, -1); ex.close() }
+        server.start()
+        val recorder = Recorder()
+        val store = ConfigStore(bootstrap(), dir, listener = recorder)
+        assertThrows(ConfigStoreException::class.java) { runBlocking { store.refresh() } }
+        assertEquals(listOf("start", "complete:false"), recorder.events)
+    }
+
+    @Test
+    fun networkErrorReportsAFailedFetch(@TempDir dir: File) {
+        // A port that was just released, so the connection is refused.
+        val closedPort = java.net.ServerSocket(0).use { it.localPort }
+        val unreachable = bootstrap().copy(endpointUrl = "http://127.0.0.1:$closedPort/config.json")
+        val recorder = Recorder()
+        val store = ConfigStore(unreachable, dir, listener = recorder)
+        assertThrows(Exception::class.java) { runBlocking { store.refresh() } }
+        assertEquals(listOf("start", "complete:false"), recorder.events)
+    }
+
+    @Test
+    fun notModifiedReportsASuccessfulFetch(@TempDir dir: File) = runBlocking {
+        val endpoint = SwitchableEndpoint().apply { start() }
+        val recorder = Recorder()
+        val store = ConfigStore(bootstrap(), dir, listener = recorder)
+        store.refresh()
+        server.removeContext("/config.json")
+        server.createContext("/config.json") { ex -> ex.sendResponseHeaders(304, -1); ex.close() }
+        recorder.events.clear()
+        store.refresh()
+        assertEquals(listOf("start", "complete:true"), recorder.events)
+        assertEquals(1, endpoint.ifNoneMatch.size)
+    }
 }

@@ -107,16 +107,28 @@ class ConfigStore(
             cachedLastModified?.let { headers["If-Modified-Since"] = it }
         }
         listener?.didStartFetch(bootstrap.endpointUrl)
-        val response = httpGet(bootstrap.endpointUrl, headers)
+        // Every didStartFetch is paired with exactly one didCompleteFetch.
+        val response = try {
+            httpGet(bootstrap.endpointUrl, headers)
+        } catch (e: Exception) {
+            lastFetchTimeMillis = nowMillis()
+            listener?.didCompleteFetch(false, e)
+            throw e
+        }
         lastFetchTimeMillis = nowMillis()
 
         if (response.statusCode == 304) {
-            // A 304 proves contact and confirms the cache is current — success.
+            // A 304 proves contact and confirms the cache is current, so it is a success.
             lastSuccessfulFetchMillis = nowMillis()
             if (forceRefresh) { lastTtlRefreshMillis = nowMillis(); saveMetadata() }
+            listener?.didCompleteFetch(true, null)
             return
         }
-        if (response.statusCode != 200) throw ConfigStoreException("HTTP ${response.statusCode}")
+        if (response.statusCode != 200) {
+            val error = ConfigStoreException("HTTP ${response.statusCode}")
+            listener?.didCompleteFetch(false, error)
+            throw error
+        }
 
         val data = response.body
         val jws = response.header(SignatureTransport.HEADER_NAME) ?: fetchSignatureSibling()
