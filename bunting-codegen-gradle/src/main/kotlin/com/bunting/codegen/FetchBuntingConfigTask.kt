@@ -10,11 +10,14 @@ import org.gradle.api.tasks.TaskAction
 
 /**
  * Fetches the latest signed config from the bootstrap's endpoint, verifies it,
- * and overwrites the seed config — the file codegen reads and the app bundles.
- * The Android counterpart of Swift's `FetchConfigPlugin`; run it from the Gradle
- * tool window (`bunting/fetchBuntingConfig`) or `./gradlew :app:fetchBuntingConfig`.
- * Never up-to-date (it exists to check for new config), and it fails rather than
- * writing anything on any fetch/verification problem.
+ * checks it is a usable seed ([SeedValidator]), and overwrites the seed config —
+ * the file codegen reads and the app bundles. The bundled seed is deliberately
+ * unsigned: it ships inside the signed app, and the runtime treats it as
+ * unverified. The Android counterpart of Swift's `FetchConfigPlugin`; run it from
+ * the Gradle tool window (`bunting/fetchBuntingConfig`) or
+ * `./gradlew :app:fetchBuntingConfig`. Never up-to-date (it exists to check for new
+ * config), and it fails rather than writing anything on any fetch, verification,
+ * or validation problem. Flags codegen will skip are logged as warnings.
  */
 abstract class FetchBuntingConfigTask : DefaultTask() {
 
@@ -33,9 +36,13 @@ abstract class FetchBuntingConfigTask : DefaultTask() {
     fun fetch() {
         val bootstrapFile = bootstrapConfig.get().asFile
         val bytes = ConfigFetcher.fetch(bootstrapFile.readText())
+        val accessorCount = SeedValidator.validate(bytes) { logger.warn("Bunting: $it") }
         val target = seedConfig.get().asFile
         target.parentFile.mkdirs()
         target.writeBytes(bytes)
-        logger.lifecycle("Bunting: wrote ${bytes.size} bytes of verified config to ${target.relativeToOrSelf(project.projectDir)}")
+        logger.lifecycle(
+            "Bunting: wrote ${bytes.size} bytes of verified config ($accessorCount typed flags) to " +
+                target.relativeToOrSelf(project.projectDir)
+        )
     }
 }

@@ -28,7 +28,7 @@
         "variants": []
       },
       "beta": {
-        "default": 15,
+        "default": 1.5e1,
         "variants": []
       },
       "production": {
@@ -152,7 +152,7 @@
       "type": "int",
       "description": "Maximum items per page",
       "development": {
-        "default": 50,
+        "default": 50.0,
         "variants": []
       },
       "beta": {

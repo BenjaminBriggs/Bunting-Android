@@ -1,0 +1,78 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (matching VERSION_NAME in gradle.properties) uploads the
+# libraries to Maven Central and creates a GitHub release with the bunting-cli zip.
+# The codegen plugin is NOT published here: its generated code needs the libraries,
+# so publish-plugin.yml is run by hand once the Central deployment is released.
+# See docs/releasing.md.
+
+on:
+  push:
+    tags: [ "v*.*.*" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match VERSION_NAME
+        run: |
+          version="$(sed -n 's/^VERSION_NAME=//p' gradle.properties)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match VERSION_NAME=${version} in gradle.properties (expected v${version})."
+            exit 1
+          fi
+
+  ci:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0'
+
+      # Uploads a signed deployment to the Central Portal. It is NOT released
+      # automatically: publish it by hand at https://central.sonatype.com/publishing/deployments.
+      - name: Publish libraries to Maven Central
+        run: ./gradlew publishToMavenCentral --stacktrace
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+
+      - name: Build bunting-cli distribution
+        run: ./gradlew :bunting-cli:distZip --stacktrace
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "${GITHUB_REF_NAME}" \
+            "bunting-cli/build/distributions/bunting-cli-${version}.zip" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag

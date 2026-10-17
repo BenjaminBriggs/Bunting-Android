@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # release.yml runs these same checks before publishing.
+  workflow_call:
 
 jobs:
   build:
@@ -28,3 +30,7 @@ jobs:
         run: ./gradlew -p bunting-codegen-gradle build --stacktrace
       - name: Example assemble
         run: ./gradlew :example:assembleDebug --stacktrace
+      - name: Publishing dry run (mavenLocal, no signing keys)
+        run: |
+          ./gradlew publishToMavenLocal --stacktrace
+          ./gradlew -p bunting-codegen-gradle publishToMavenLocal --stacktrace

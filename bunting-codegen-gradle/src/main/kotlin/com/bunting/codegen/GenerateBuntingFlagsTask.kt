@@ -44,7 +44,7 @@ abstract class GenerateBuntingFlagsTask : DefaultTask() {
         }
 
         val pkg = packageName.get()
-        val content = BuntingCodeGenerator.generate(seedJson, pkg)
+        val content = BuntingCodeGenerator.generate(seedJson, pkg) { logger.warn("Bunting codegen: $it") }
         val target = outputDir.get().asFile.resolve(pkg.replace('.', '/')).resolve("BuntingGenerated.kt")
         target.parentFile.mkdirs()
         target.writeText(content)

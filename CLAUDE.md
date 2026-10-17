@@ -19,7 +19,7 @@ bunting/               # Pure-JVM core (⇄ Swift Sources/Bunting)
 bunting-cli/           # JVM CLI: fetch / verify / decode (⇄ Swift bunting-cli)
 bunting-android/       # AGP binding: configure(context), AndroidContextProvider, assets, foreground refresh
 bunting-debug/         # Compose Info/Debug screens over the FlagInfo presenter
-bunting-codegen-gradle/  # Included build: com.bunting.codegen Gradle plugin (⇄ Swift codegen plugin)
+bunting-codegen-gradle/  # Included build: io.github.benjaminbriggs.bunting.codegen Gradle plugin (⇄ Swift codegen plugin)
 example/               # Compose demo app consuming everything above
 ```
 
@@ -52,7 +52,12 @@ thread; only `refresh()`, `resetIdentity()`, `awaitInitialLoad()` suspend.
 kotlinx-serialization + coroutines; anything touching `android.*` lives in
 `:bunting-android` (Robolectric-tested) or above.
 
-**Codegen never fails the build** — missing/invalid seed emits a fallback file.
+**Codegen never fails the build over seed content** — missing/invalid seed emits a
+fallback file; a flag the reference decoder would skip (C1, values read per C2 in
+`WireContract`, mirroring `bunting-admin/src/lib/artifact-decoder.ts`) gets no accessor
+and a warning. The one hard error is two keys mapping to the same Kotlin identifier.
+Generated accessors go through the default-returning `Bunting.bool(...)` facade, never
+`Bunting.instance` (which throws before `configure`).
 Generated dirs register on the **java** source set (`sources.kotlin` did not feed
 compileKotlin on AGP 8.9; the java wiring is kept on later AGP versions as the
 known-good path).
@@ -60,6 +65,13 @@ known-good path).
 **Style**: `bool == false` over `!bool`; libraries log via `java.util.logging`, never
 `println` (CLI output is the exception). Unit tests run once against the debug variant
 in AGP modules.
+
+**Publishing**: one version (`VERSION_NAME` in `gradle.properties`, also read by the
+codegen build). Libraries go to Maven Central as `io.github.benjaminbriggs:<module>` via
+`com.vanniktech.maven.publish` 0.35.0 (0.36+ needs Gradle 9); the plugin goes to the
+Plugin Portal by the manual `publish-plugin.yml`, only after the libraries are on
+Central. Signing is only required when `mavenCentralUsername` is set, so
+`publishToMavenLocal` needs no keys. See `docs/releasing.md`.
 
 **Repo policy**: commits land directly on `main`; `./gradlew build` green before every
 commit.

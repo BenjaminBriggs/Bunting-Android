@@ -1,7 +1,10 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.vanniktech.maven.publish)
 }
 
 android {
@@ -37,7 +40,8 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":bunting"))
+    // BuntingClient is part of the screens' public signatures.
+    api(project(":bunting"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
@@ -49,4 +53,26 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+// Coordinates, license, SCM and signing come from the root gradle.properties.
+// Publishes the release variant. AGP's built-in javadoc generation (its bundled
+// Dokka) fails on these modules, so the javadoc jar Maven Central requires is
+// empty; the sources jar carries the KDoc.
+mavenPublishing {
+    configure(AndroidSingleVariantLibrary(variant = "release", sourcesJar = true, publishJavadocJar = false))
+    pom {
+        name = "Bunting Debug UI"
+        description = "Jetpack Compose screens for inspecting Bunting feature flags and editing local overrides."
+    }
+}
+
+val emptyJavadocJar by tasks.registering(Jar::class) {
+    archiveClassifier.set("javadoc")
+}
+
+publishing {
+    publications.withType<MavenPublication>().configureEach {
+        artifact(emptyJavadocJar)
+    }
 }

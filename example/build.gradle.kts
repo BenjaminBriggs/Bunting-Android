@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.bunting.codegen")
+    id("io.github.benjaminbriggs.bunting.codegen")
 }
 
 android {
@@ -59,4 +59,7 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Bunting is a process-wide singleton: a fresh JVM per test class lets
+    // PreConfigureAccessTest observe the unconfigured state.
+    forkEvery = 1
 }
