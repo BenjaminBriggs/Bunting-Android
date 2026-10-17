@@ -9,13 +9,14 @@
 # Usage: scripts/local-bootstrap.sh [app-identifier] [host] [output]
 #   app-identifier  default: local-demo (create it in the admin dashboard first)
 #   host            default: 10.0.2.2 (use your machine's IP for a physical device)
-#   output          default: example-local/src/main/assets/bunting_config.json
+#   output          default: example-local/src/debug/assets/bunting_config.json
+#                   (gitignored; overrides the keyless placeholder in src/main/assets)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="${1:-local-demo}"
 HOST="${2:-10.0.2.2}"
-OUT="${3:-example-local/src/main/assets/bunting_config.json}"
+OUT="${3:-example-local/src/debug/assets/bunting_config.json}"
 
 if ! docker ps --format '{{.Names}}' | grep -q '^bunting-postgres$'; then
   echo "error: bunting-postgres is not running — start the admin stack first (make setup && make dev in bunting-admin)" >&2

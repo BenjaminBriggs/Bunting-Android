@@ -5,3 +5,7 @@ build/
 local.properties
 .DS_Store
 *.hprof
+
+# example-local bootstrap, generated per machine by scripts/local-bootstrap.sh.
+# The debug source set overrides the keyless placeholder in src/main/assets.
+example-local/src/debug/assets/bunting_config.json

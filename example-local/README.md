@@ -28,5 +28,7 @@ config end-to-end. No bundled seed, no codegen — a status card plus the debug 
   and make sure MinIO's port 9000 is reachable.
 - The app allows cleartext HTTP (`usesCleartextTraffic`) because the local MinIO has no
   TLS. Don't copy that into a production app.
-- The checked-in `assets/bunting_config.json` is a placeholder with no keys; the app
-  shows a hint until you run the script.
+- The checked-in `src/main/assets/bunting_config.json` is a placeholder with no keys; the
+  app shows a hint until you run the script. The script writes
+  `src/debug/assets/bunting_config.json`, which is gitignored and overrides the placeholder
+  in debug builds, so your local key never shows up as a change.
